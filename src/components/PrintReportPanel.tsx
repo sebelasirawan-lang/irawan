@@ -471,6 +471,15 @@ export const PrintReportPanel: React.FC<PrintReportPanelProps> = ({
 
   return (
     <div className="space-y-6">
+      <style>{`
+        @media print {
+          @page {
+            size: A4 portrait;
+            margin: 8mm;
+          }
+        }
+      `}</style>
+
       {/* =====================================================================
           INTERACTIVE FILTER & CONFIGURATION PANEL (HIDDEN ON PRINT)
          ===================================================================== */}
@@ -481,11 +490,16 @@ export const PrintReportPanel: React.FC<PrintReportPanelProps> = ({
               <Printer className="w-5 h-5" />
             </div>
             <div>
-              <h2 className="text-base font-bold text-slate-100">
-                Pusat Cetak Laporan Barang Masuk & Keluar Gudang
-              </h2>
+              <div className="flex flex-wrap items-center gap-2">
+                <h2 className="text-base font-bold text-slate-100">
+                  Pusat Cetak Laporan Barang Masuk & Keluar Gudang
+                </h2>
+                <span className="px-2 py-0.5 rounded-md bg-amber-500/15 border border-amber-500/35 text-amber-300 font-mono text-[10px] font-bold uppercase">
+                  A4 Portrait (Tegak)
+                </span>
+              </div>
               <p className="text-xs text-slate-400">
-                Dilengkapi kolom <strong>Nama Mekanik Pengambil</strong>, <strong>Code Unit</strong>, dan <strong>PIC Logistik</strong> pada setiap transaksi (dapat diedit langsung sebelum cetak)
+                Format cetak <strong>A4 Portrait</strong> dilengkapi kolom <strong>Nama Mekanik Pengambil</strong>, <strong>Code Unit</strong>, dan <strong>PIC Logistik</strong>
               </p>
             </div>
           </div>
@@ -505,7 +519,7 @@ export const PrintReportPanel: React.FC<PrintReportPanelProps> = ({
               className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-extrabold text-xs transition cursor-pointer shadow-lg shadow-amber-500/20"
             >
               <Printer className="w-4 h-4" />
-              Cetak Laporan Sekarang (Print / PDF)
+              Cetak Laporan Portrait (A4 / PDF)
             </button>
           </div>
         </div>
@@ -727,40 +741,40 @@ export const PrintReportPanel: React.FC<PrintReportPanelProps> = ({
       </div>
 
       {/* =====================================================================
-          PRINTABLE EXECUTIVE WAREHOUSE REPORT SHEET
-          Designed to look crisp, authoritative, and attractive both on screen & paper
+          PRINTABLE EXECUTIVE WAREHOUSE REPORT SHEET (A4 PORTRAIT)
+          Designed for A4 Portrait paper (210mm width) both on screen & print
          ===================================================================== */}
-      <div className="bg-white text-slate-900 rounded-2xl shadow-2xl border border-slate-200 p-6 sm:p-10 print:shadow-none print:border-none print:p-0 print:rounded-none max-w-[1360px] mx-auto">
-        {/* 1. OFFICIAL LETTERHEAD / KOP SURAT LAPORAN */}
-        <div className="border-b-4 border-slate-900 pb-5 mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div className="flex items-start gap-3.5">
-            <div className="w-12 h-12 rounded-xl bg-slate-900 text-amber-400 flex items-center justify-center shrink-0 font-extrabold shadow-sm print:border print:border-slate-900">
-              <Boxes className="w-7 h-7" />
+      <div className="bg-white text-slate-900 rounded-2xl shadow-2xl border border-slate-200 p-5 sm:p-8 print:shadow-none print:border-none print:p-0 print:rounded-none max-w-[210mm] print:max-w-none print:w-full mx-auto">
+        {/* 1. OFFICIAL LETTERHEAD / KOP SURAT LAPORAN (PORTRAIT OPTIMIZED) */}
+        <div className="border-b-4 border-slate-900 pb-4 mb-4 flex flex-col sm:flex-row sm:items-start justify-between gap-3">
+          <div className="flex items-start gap-3">
+            <div className="w-10 h-10 rounded-xl bg-slate-900 text-amber-400 flex items-center justify-center shrink-0 font-extrabold shadow-sm print:border print:border-slate-900">
+              <Boxes className="w-6 h-6" />
             </div>
             <div>
-              <div className="flex items-center gap-2">
-                <span className="text-[10px] font-mono font-bold uppercase tracking-widest px-2 py-0.5 rounded bg-slate-900 text-amber-400">
+              <div className="flex flex-wrap items-center gap-1.5">
+                <span className="text-[9px] font-mono font-bold uppercase tracking-widest px-1.5 py-0.5 rounded bg-slate-900 text-amber-400">
                   PT. MEGA MULTI ENERGI
                 </span>
-                <span className="text-xs font-mono text-slate-500">
+                <span className="text-[10px] font-mono text-slate-500">
                   {docNumber}
                 </span>
-                <span className="text-[11px] font-mono font-semibold text-slate-600">
+                <span className="text-[10px] font-mono font-semibold text-slate-600">
                   • Author: Irawan
                 </span>
               </div>
-              <h1 className="text-xl sm:text-2xl font-extrabold tracking-tight text-slate-900 mt-1">
+              <h1 className="text-lg sm:text-xl font-extrabold tracking-tight text-slate-900 mt-0.5">
                 {companyName}
               </h1>
-              <p className="text-xs font-medium text-slate-600">
-                {warehouseUnit} • Sistem Inventaris & Scanner QR Real-Time • Author: Irawan
+              <p className="text-[11px] font-medium text-slate-600">
+                {warehouseUnit} • Sistem Inventaris & Scanner QR Real-Time
               </p>
             </div>
           </div>
 
-          <div className="sm:text-right space-y-1">
+          <div className="sm:text-right space-y-0.5 shrink-0">
             <div
-              className={`inline-block px-3 py-1 rounded-lg font-mono text-xs font-extrabold uppercase tracking-wider border ${
+              className={`inline-block px-2.5 py-0.5 rounded-md font-mono text-[10px] font-extrabold uppercase tracking-wider border ${
                 flowFilter === 'IN'
                   ? 'bg-emerald-50 text-emerald-800 border-emerald-300'
                   : flowFilter === 'OUT'
@@ -770,104 +784,104 @@ export const PrintReportPanel: React.FC<PrintReportPanelProps> = ({
             >
               {reportTitle}
             </div>
-            <div className="text-xs font-bold text-slate-800 font-mono">
+            <div className="text-[10px] font-bold text-slate-800 font-mono">
               PERIODE: {periodLabel}
             </div>
-            <div className="text-[11px] text-slate-500 font-mono">
+            <div className="text-[9px] text-slate-500 font-mono">
               Dicetak: {new Date().toLocaleString('id-ID')}
             </div>
           </div>
         </div>
 
-        {/* 2. EXECUTIVE SUMMARY CARDS (4 METRIC BOXES) */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3.5 mb-6">
+        {/* 2. EXECUTIVE SUMMARY CARDS (4 METRIC BOXES - COMPACT FOR PORTRAIT) */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 mb-4">
           {/* Box 1: Total SKU & Stok Akhir */}
-          <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-3.5">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 block">
+          <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-2.5">
+            <span className="text-[9px] font-bold uppercase tracking-wider text-slate-500 block">
               Total Item Tercatat
             </span>
-            <div className="mt-1 flex items-baseline gap-1.5">
-              <span className="text-2xl font-extrabold font-mono text-slate-900">
-                {filteredRecapItems.length}
+            <div className="mt-0.5 flex items-baseline gap-1">
+              <span className="text-lg font-extrabold font-mono text-slate-900">
+                {filteredRecapItems.length.toLocaleString('id-ID')}
               </span>
-              <span className="text-xs font-semibold text-slate-600">SKU</span>
+              <span className="text-[10px] font-semibold text-slate-600">SKU</span>
             </div>
-            <div className="mt-1 text-[11px] font-mono text-slate-600">
-              Saldo Akhir: <strong>{reportStats.recapTotalAkhir} Pcs</strong>
+            <div className="mt-0.5 text-[10px] font-mono text-slate-600">
+              Saldo: <strong>{reportStats.recapTotalAkhir.toLocaleString('id-ID')} Pcs</strong>
             </div>
           </div>
 
           {/* Box 2: Total Barang Masuk (IN) */}
           <div
-            className={`rounded-xl border p-3.5 ${
+            className={`rounded-xl border p-2.5 ${
               flowFilter === 'IN'
                 ? 'border-emerald-400 bg-emerald-50/70 ring-1 ring-emerald-400'
                 : 'border-slate-200 bg-emerald-50/30'
             }`}
           >
-            <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-700 block">
-              Akumulasi Barang Masuk (+IN)
+            <span className="text-[9px] font-bold uppercase tracking-wider text-emerald-700 block">
+              Barang Masuk (+IN)
             </span>
-            <div className="mt-1 flex items-baseline gap-1.5">
-              <span className="text-2xl font-extrabold font-mono text-emerald-700">
+            <div className="mt-0.5 flex items-baseline gap-1">
+              <span className="text-lg font-extrabold font-mono text-emerald-700">
                 +{reportStats.recapTotalIn.toLocaleString('id-ID')}
               </span>
-              <span className="text-xs font-semibold text-emerald-700">Pcs</span>
+              <span className="text-[10px] font-semibold text-emerald-700">Pcs</span>
             </div>
-            <div className="mt-1 text-[11px] font-mono text-emerald-800">
-              Nilai Masuk: <strong>{formatRupiah(reportStats.recapInValue)}</strong>
+            <div className="mt-0.5 text-[10px] font-mono text-emerald-800 truncate">
+              <strong>{formatRupiah(reportStats.recapInValue)}</strong>
             </div>
           </div>
 
           {/* Box 3: Total Barang Keluar (OUT) */}
           <div
-            className={`rounded-xl border p-3.5 ${
+            className={`rounded-xl border p-2.5 ${
               flowFilter === 'OUT'
                 ? 'border-rose-400 bg-rose-50/70 ring-1 ring-rose-400'
                 : 'border-slate-200 bg-rose-50/30'
             }`}
           >
-            <span className="text-[10px] font-bold uppercase tracking-wider text-rose-700 block">
-              Akumulasi Barang Keluar (-OUT)
+            <span className="text-[9px] font-bold uppercase tracking-wider text-rose-700 block">
+              Barang Keluar (-OUT)
             </span>
-            <div className="mt-1 flex items-baseline gap-1.5">
-              <span className="text-2xl font-extrabold font-mono text-rose-700">
+            <div className="mt-0.5 flex items-baseline gap-1">
+              <span className="text-lg font-extrabold font-mono text-rose-700">
                 -{reportStats.recapTotalOut.toLocaleString('id-ID')}
               </span>
-              <span className="text-xs font-semibold text-rose-700">Pcs</span>
+              <span className="text-[10px] font-semibold text-rose-700">Pcs</span>
             </div>
-            <div className="mt-1 text-[11px] font-mono text-rose-800">
-              Nilai Keluar: <strong>{formatRupiah(reportStats.recapOutValue)}</strong>
+            <div className="mt-0.5 text-[10px] font-mono text-rose-800 truncate">
+              <strong>{formatRupiah(reportStats.recapOutValue)}</strong>
             </div>
           </div>
 
           {/* Box 4: Nilai Persediaan Akhir */}
-          <div className="rounded-xl border border-slate-200 bg-amber-50/40 p-3.5">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-amber-800 block">
-              Total Nilai Aset Persediaan
+          <div className="rounded-xl border border-slate-200 bg-amber-50/40 p-2.5">
+            <span className="text-[9px] font-bold uppercase tracking-wider text-amber-800 block">
+              Nilai Aset Persediaan
             </span>
-            <div className="mt-1">
-              <span className="text-xl font-extrabold font-mono text-slate-900">
+            <div className="mt-0.5 truncate">
+              <span className="text-sm font-extrabold font-mono text-slate-900">
                 {formatRupiah(reportStats.recapTotalAsset)}
               </span>
             </div>
-            <div className="mt-1 text-[11px] font-mono text-slate-600">
-              Log Periode Ini: <strong>{reportStats.txCount} Transaksi</strong>
+            <div className="mt-0.5 text-[10px] font-mono text-slate-600">
+              Log: <strong>{reportStats.txCount} Transaksi</strong>
             </div>
           </div>
         </div>
 
         {/* Visual Proportion Bar (Inbound vs Outbound Ratio) */}
-        <div className="mb-6 p-3.5 rounded-xl border border-slate-200 bg-slate-50">
-          <div className="flex flex-wrap items-center justify-between text-xs font-bold text-slate-700 mb-2">
+        <div className="mb-5 p-2.5 rounded-xl border border-slate-200 bg-slate-50">
+          <div className="flex flex-wrap items-center justify-between text-[10px] font-bold text-slate-700 mb-1.5">
             <span>
               Perbandingan Volume Pergerakan Barang (Masuk vs Keluar)
             </span>
-            <span className="font-mono text-[11px]">
+            <span className="font-mono text-[10px]">
               IN: {reportStats.recapTotalIn} Pcs ({Math.round((reportStats.recapTotalIn / Math.max(1, reportStats.recapTotalIn + reportStats.recapTotalOut)) * 100)}%) • OUT: {reportStats.recapTotalOut} Pcs ({Math.round((reportStats.recapTotalOut / Math.max(1, reportStats.recapTotalIn + reportStats.recapTotalOut)) * 100)}%)
             </span>
           </div>
-          <div className="w-full h-3 rounded-full bg-slate-200 overflow-hidden flex">
+          <div className="w-full h-2.5 rounded-full bg-slate-200 overflow-hidden flex">
             <div
               style={{
                 width: `${
@@ -889,23 +903,23 @@ export const PrintReportPanel: React.FC<PrintReportPanelProps> = ({
               className="bg-rose-600 h-full"
             />
           </div>
-          <div className="flex items-center justify-between text-[10px] text-slate-500 mt-1.5 font-mono">
+          <div className="flex flex-wrap items-center justify-between text-[9px] text-slate-500 mt-1 font-mono">
             <span>
-              Distribusi Kategori: CNU ({reportStats.cnuCount} SKU) • SPT ({reportStats.sptCount} SKU) • PS ({reportStats.psCount} SKU)
+              Kategori: CNU ({reportStats.cnuCount}) • SPT ({reportStats.sptCount}) • PS ({reportStats.psCount})
             </span>
             <span>
-              Status Stok: ORDER ({filteredRecapItems.filter((i) => i.remark === 'ORDER').length}) • AMAN ({filteredRecapItems.filter((i) => i.remark === 'AMAN').length}) • OVER ({filteredRecapItems.filter((i) => i.remark === 'OVER').length})
+              Status: ORDER ({filteredRecapItems.filter((i) => i.remark === 'ORDER').length}) • AMAN ({filteredRecapItems.filter((i) => i.remark === 'AMAN').length}) • OVER ({filteredRecapItems.filter((i) => i.remark === 'OVER').length})
             </span>
           </div>
         </div>
 
-        {/* 3. SECTION A: LOG TRANSAKSI PERIODE (DENGAN NAMA MEKANIK PENGAMBIL, CODE UNIT, & PIC LOGISTIK) */}
+        {/* 3. SECTION A: LOG TRANSAKSI PERIODE (PORTRAIT TABLE WITH MEKANIK, CODE UNIT, & PIC LOGISTIK) */}
         {(sectionMode === 'BOTH' || sectionMode === 'TRANSACTIONS_ONLY') && (
-          <div className="mb-8">
-            <div className="flex flex-wrap items-center justify-between gap-2 mb-2.5">
+          <div className="mb-6">
+            <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
               <div>
-                <h3 className="text-sm font-extrabold uppercase tracking-wider text-slate-900 flex items-center gap-2">
-                  <FileText className="w-4 h-4 text-slate-700" />
+                <h3 className="text-xs font-extrabold uppercase tracking-wider text-slate-900 flex items-center gap-1.5">
+                  <FileText className="w-3.5 h-3.5 text-slate-700" />
                   A. Rincian Log Transaksi{' '}
                   {flowFilter === 'IN'
                     ? 'Barang Masuk (Inbound)'
@@ -915,16 +929,16 @@ export const PrintReportPanel: React.FC<PrintReportPanelProps> = ({
                   ({periodType === 'DAILY' ? 'Harian' : periodType === 'WEEKLY' ? 'Mingguan' : 'Bulanan'})
                 </h3>
                 <p className="no-print text-[11px] text-slate-500 mt-0.5">
-                  Anda dapat langsung mengisi/mengubah <strong>Nama Mekanik Pengambil</strong>, <strong>Code Unit</strong>, dan <strong>PIC Logistik</strong> pada setiap baris transaksi di bawah ini.
+                  Anda dapat langsung mengisi/mengubah <strong>Nama Mekanik Pengambil</strong>, <strong>Code Unit</strong>, dan <strong>PIC Logistik</strong> pada setiap baris transaksi.
                 </p>
               </div>
-              <span className="text-xs font-mono font-semibold text-slate-600">
+              <span className="text-[11px] font-mono font-semibold text-slate-600">
                 Total: {filteredTransactions.length} Transaksi
               </span>
             </div>
 
             {filteredTransactions.length === 0 ? (
-              <div className="border border-slate-200 rounded-xl p-6 text-center text-xs text-slate-500 bg-slate-50 space-y-2">
+              <div className="border border-slate-200 rounded-xl p-5 text-center text-xs text-slate-500 bg-slate-50 space-y-2">
                 <p>
                   Tidak ada aktivitas transaksi pada filter tanggal/periode ini.
                 </p>
@@ -939,84 +953,88 @@ export const PrintReportPanel: React.FC<PrintReportPanelProps> = ({
                 )}
               </div>
             ) : (
-              <div className="overflow-x-auto border border-slate-300 rounded-xl">
-                <table className="w-full text-left border-collapse text-xs">
+              <div className="overflow-x-auto print:overflow-visible border border-slate-300 rounded-lg">
+                <table className="w-full text-left border-collapse text-[10px] print:text-[8.5px] leading-tight">
                   <thead>
-                    <tr className="bg-slate-900 text-white text-[10px] font-bold uppercase tracking-wider">
-                      <th className="py-2.5 px-2 text-center border-r border-slate-700">No</th>
-                      <th className="py-2.5 px-2.5 border-r border-slate-700">Tanggal</th>
-                      <th className="py-2.5 px-2 border-r border-slate-700">Arus</th>
-                      <th className="py-2.5 px-2.5 border-r border-slate-700">Code Item & Rak</th>
-                      <th className="py-2.5 px-3 border-r border-slate-700">Nama Barang & Part Number</th>
-                      <th className="py-2.5 px-2 text-right border-r border-slate-700">Qty</th>
-                      <th className="py-2.5 px-2 text-center border-r border-slate-700">Saldo</th>
-                      <th className="py-2.5 px-2.5 bg-amber-950/60 text-amber-200 border-r border-slate-700">
-                        Nama Mekanik Pengambil
+                    <tr className="bg-slate-900 text-white text-[9px] print:text-[8px] font-bold uppercase tracking-tight">
+                      <th className="py-2 px-1.5 text-center border-r border-slate-700 w-6">No</th>
+                      <th className="py-2 px-1.5 border-r border-slate-700 w-20">Tgl & Arus</th>
+                      <th className="py-2 px-1.5 border-r border-slate-700 w-20">Code & Rak</th>
+                      <th className="py-2 px-2 border-r border-slate-700">Nama Barang & PN</th>
+                      <th className="py-2 px-1.5 text-right border-r border-slate-700 w-14">Qty / Saldo</th>
+                      <th className="py-2 px-1.5 bg-amber-950/60 text-amber-200 border-r border-slate-700 w-28">
+                        Mekanik Pengambil
                       </th>
-                      <th className="py-2.5 px-2.5 bg-cyan-950/60 text-cyan-200 border-r border-slate-700">
+                      <th className="py-2 px-1.5 bg-cyan-950/60 text-cyan-200 border-r border-slate-700 w-24">
                         Code Unit
                       </th>
-                      <th className="py-2.5 px-2.5 bg-emerald-950/60 text-emerald-200 border-r border-slate-700">
+                      <th className="py-2 px-1.5 bg-emerald-950/60 text-emerald-200 border-r border-slate-700 w-24">
                         PIC Logistik
                       </th>
-                      <th className="py-2.5 px-2.5">Keterangan</th>
+                      <th className="py-2 px-1.5 w-24">Ket.</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-200 text-[11px]">
+                  <tbody className="divide-y divide-slate-200">
                     {filteredTransactions.map((tx, idx) => {
                       const isIn = tx.txType === 'IN' || tx.txType === 'ADJ_PLUS';
                       const { officer, recipient } = splitPicAndRecipient(tx);
                       const resolvedCodeUnit = getTransactionCodeUnit(tx);
 
                       return (
-                        <tr key={tx.id} className="even:bg-slate-50/80">
-                          <td className="py-2 px-2 text-center font-mono text-slate-500 border-r border-slate-200">
+                        <tr key={tx.id} className="even:bg-slate-50/80 align-top">
+                          <td className="py-1.5 px-1 text-center font-mono text-slate-500 border-r border-slate-200">
                             {idx + 1}
                           </td>
-                          <td className="py-2 px-2.5 font-mono font-semibold text-slate-800 border-r border-slate-200 whitespace-nowrap">
-                            {formatDateDdMmmmYy(tx.dateStr)}
-                          </td>
-                          <td className="py-2 px-2 border-r border-slate-200 whitespace-nowrap">
+                          <td className="py-1.5 px-1.5 font-mono border-r border-slate-200">
+                            <div className="font-semibold text-slate-800 whitespace-nowrap">
+                              {formatDateDdMmmmYy(tx.dateStr)}
+                            </div>
                             <span
-                              className={`inline-block px-1.5 py-0.5 rounded font-mono text-[9px] font-extrabold ${
+                              className={`inline-block mt-0.5 px-1 py-0.2 rounded font-mono text-[8px] font-extrabold ${
                                 isIn
                                   ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
                                   : 'bg-rose-100 text-rose-800 border border-rose-300'
                               }`}
                             >
                               {tx.txType === 'IN'
-                                ? 'MASUK (IN)'
+                                ? 'MASUK'
                                 : tx.txType === 'OUT'
-                                ? 'KELUAR (OUT)'
+                                ? 'KELUAR'
                                 : tx.txType === 'ADJ_PLUS'
                                 ? 'ADJ (+)'
                                 : 'ADJ (-)'}
                             </span>
                           </td>
-                          <td className="py-2 px-2.5 font-mono border-r border-slate-200 whitespace-nowrap">
+                          <td className="py-1.5 px-1.5 font-mono border-r border-slate-200">
                             <div className="font-bold text-slate-900">{tx.codeItem}</div>
-                            <div className="text-[10px] text-slate-500">Rak: {tx.rak}</div>
+                            <div className="text-[9px] print:text-[7.5px] text-slate-500">
+                              Rak: {tx.rak}
+                            </div>
                           </td>
-                          <td className="py-2 px-3 border-r border-slate-200">
-                            <div className="font-bold text-slate-900">{tx.partName}</div>
-                            <div className="font-mono text-[10px] text-slate-500">
+                          <td className="py-1.5 px-2 border-r border-slate-200">
+                            <div className="font-bold text-slate-900 break-words">
+                              {tx.partName}
+                            </div>
+                            <div className="font-mono text-[9px] print:text-[7.5px] text-slate-500 break-all">
                               PN: {tx.partNumber} ({tx.typeCode})
                             </div>
                           </td>
-                          <td
-                            className={`py-2 px-2 text-right font-mono font-extrabold border-r border-slate-200 whitespace-nowrap ${
-                              isIn ? 'text-emerald-700' : 'text-rose-700'
-                            }`}
-                          >
-                            {isIn ? '+' : '-'}
-                            {tx.qty} Pcs
-                          </td>
-                          <td className="py-2 px-2 text-center font-mono text-slate-700 border-r border-slate-200 whitespace-nowrap">
-                            {tx.prevAkhirQty} → <strong>{tx.newAkhirQty}</strong>
+                          <td className="py-1.5 px-1.5 text-right font-mono border-r border-slate-200 whitespace-nowrap">
+                            <div
+                              className={`font-extrabold ${
+                                isIn ? 'text-emerald-700' : 'text-rose-700'
+                              }`}
+                            >
+                              {isIn ? '+' : '-'}
+                              {tx.qty} Pcs
+                            </div>
+                            <div className="text-[9px] print:text-[7.5px] text-slate-500">
+                              {tx.prevAkhirQty}→<strong>{tx.newAkhirQty}</strong>
+                            </div>
                           </td>
 
                           {/* 1. NAMA MEKANIK PENGAMBIL */}
-                          <td className="py-2 px-2 border-r border-slate-200 bg-amber-50/30">
+                          <td className="py-1.5 px-1.5 border-r border-slate-200 bg-amber-50/30">
                             {onUpdateTransaction ? (
                               <>
                                 <div className="no-print flex items-center gap-1">
@@ -1024,7 +1042,7 @@ export const PrintReportPanel: React.FC<PrintReportPanelProps> = ({
                                   <input
                                     type="text"
                                     value={recipient === '-' ? '' : recipient}
-                                    placeholder="Isi nama mekanik..."
+                                    placeholder="Mekanik..."
                                     onChange={(e) =>
                                       handleInlineTxFieldChange(
                                         tx,
@@ -1032,20 +1050,20 @@ export const PrintReportPanel: React.FC<PrintReportPanelProps> = ({
                                         e.target.value
                                       )
                                     }
-                                    className="w-full min-w-[125px] bg-white border border-slate-300 focus:border-amber-600 rounded px-1.5 py-1 text-[11px] font-semibold text-slate-900 outline-none"
+                                    className="w-full min-w-[90px] bg-white border border-slate-300 focus:border-amber-600 rounded px-1.5 py-0.5 text-[10px] font-semibold text-slate-900 outline-none"
                                   />
                                 </div>
-                                <div className="hidden print:block font-bold text-slate-900">
+                                <div className="hidden print:block font-bold text-slate-900 break-words">
                                   {recipient}
                                 </div>
                               </>
                             ) : (
-                              <div className="font-bold text-slate-900">{recipient}</div>
+                              <div className="font-bold text-slate-900 break-words">{recipient}</div>
                             )}
                           </td>
 
                           {/* 2. CODE UNIT */}
-                          <td className="py-2 px-2 border-r border-slate-200 bg-cyan-50/30">
+                          <td className="py-1.5 px-1.5 border-r border-slate-200 bg-cyan-50/30">
                             {onUpdateTransaction ? (
                               <>
                                 <div className="no-print flex items-center gap-1">
@@ -1053,7 +1071,7 @@ export const PrintReportPanel: React.FC<PrintReportPanelProps> = ({
                                   <input
                                     type="text"
                                     value={resolvedCodeUnit === '-' ? '' : resolvedCodeUnit}
-                                    placeholder="Isi code unit..."
+                                    placeholder="Code unit..."
                                     onChange={(e) =>
                                       handleInlineTxFieldChange(
                                         tx,
@@ -1061,22 +1079,22 @@ export const PrintReportPanel: React.FC<PrintReportPanelProps> = ({
                                         e.target.value
                                       )
                                     }
-                                    className="w-full min-w-[115px] bg-white border border-slate-300 focus:border-cyan-600 rounded px-1.5 py-1 text-[11px] font-mono font-bold text-slate-900 outline-none"
+                                    className="w-full min-w-[80px] bg-white border border-slate-300 focus:border-cyan-600 rounded px-1.5 py-0.5 text-[10px] font-mono font-bold text-slate-900 outline-none"
                                   />
                                 </div>
-                                <div className="hidden print:block font-mono font-bold text-slate-900">
+                                <div className="hidden print:block font-mono font-bold text-slate-900 break-words">
                                   {resolvedCodeUnit}
                                 </div>
                               </>
                             ) : (
-                              <div className="font-mono font-bold text-slate-900">
+                              <div className="font-mono font-bold text-slate-900 break-words">
                                 {resolvedCodeUnit}
                               </div>
                             )}
                           </td>
 
                           {/* 3. PIC LOGISTIK */}
-                          <td className="py-2 px-2 border-r border-slate-200 bg-emerald-50/30">
+                          <td className="py-1.5 px-1.5 border-r border-slate-200 bg-emerald-50/30">
                             {onUpdateTransaction ? (
                               <>
                                 <div className="no-print flex items-center gap-1">
@@ -1084,7 +1102,7 @@ export const PrintReportPanel: React.FC<PrintReportPanelProps> = ({
                                   <input
                                     type="text"
                                     value={officer}
-                                    placeholder="Isi PIC Logistik..."
+                                    placeholder="PIC Logistik..."
                                     onChange={(e) =>
                                       handleInlineTxFieldChange(
                                         tx,
@@ -1092,19 +1110,19 @@ export const PrintReportPanel: React.FC<PrintReportPanelProps> = ({
                                         e.target.value
                                       )
                                     }
-                                    className="w-full min-w-[120px] bg-white border border-slate-300 focus:border-emerald-600 rounded px-1.5 py-1 text-[11px] font-semibold text-slate-900 outline-none"
+                                    className="w-full min-w-[85px] bg-white border border-slate-300 focus:border-emerald-600 rounded px-1.5 py-0.5 text-[10px] font-semibold text-slate-900 outline-none"
                                   />
                                 </div>
-                                <div className="hidden print:block font-semibold text-slate-900">
+                                <div className="hidden print:block font-semibold text-slate-900 break-words">
                                   {officer}
                                 </div>
                               </>
                             ) : (
-                              <div className="font-semibold text-slate-900">{officer}</div>
+                              <div className="font-semibold text-slate-900 break-words">{officer}</div>
                             )}
                           </td>
 
-                          <td className="py-2 px-2.5 text-slate-700">{tx.notes}</td>
+                          <td className="py-1.5 px-1.5 text-slate-700 break-words">{tx.notes}</td>
                         </tr>
                       );
                     })}
@@ -1115,12 +1133,12 @@ export const PrintReportPanel: React.FC<PrintReportPanelProps> = ({
           </div>
         )}
 
-        {/* 4. SECTION B: REKAPITULASI MUTASI & SALDO BARANG GUDANG */}
+        {/* 4. SECTION B: REKAPITULASI MUTASI & SALDO BARANG GUDANG (PORTRAIT TABLE) */}
         {(sectionMode === 'BOTH' || sectionMode === 'SUMMARY_ONLY') && (
-          <div className="mb-8">
-            <div className="flex flex-wrap items-center justify-between gap-2 mb-2.5">
-              <h3 className="text-sm font-extrabold uppercase tracking-wider text-slate-900 flex items-center gap-2">
-                <CheckCircle2 className="w-4 h-4 text-slate-700" />
+          <div className="mb-6">
+            <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+              <h3 className="text-xs font-extrabold uppercase tracking-wider text-slate-900 flex items-center gap-1.5">
+                <CheckCircle2 className="w-3.5 h-3.5 text-slate-700" />
                 {sectionMode === 'BOTH' ? 'B.' : 'A.'} Tabel Rekapitulasi Mutasi{' '}
                 {flowFilter === 'IN'
                   ? 'Barang Masuk (IN)'
@@ -1129,7 +1147,7 @@ export const PrintReportPanel: React.FC<PrintReportPanelProps> = ({
                   : 'Stok Masuk & Keluar Gudang'}
               </h3>
               <div className="flex flex-wrap items-center gap-2">
-                <span className="text-xs font-mono font-semibold text-slate-600">
+                <span className="text-[11px] font-mono font-semibold text-slate-600">
                   Total: {filteredRecapItems.length.toLocaleString('id-ID')} Item Gudang
                 </span>
                 <div className="no-print flex items-center gap-1.5 text-xs">
@@ -1183,167 +1201,156 @@ export const PrintReportPanel: React.FC<PrintReportPanelProps> = ({
               </div>
             </div>
 
-            <div className="overflow-x-auto border border-slate-300 rounded-xl">
-              <table className="w-full text-left border-collapse text-xs">
+            <div className="overflow-x-auto print:overflow-visible border border-slate-300 rounded-lg">
+              <table className="w-full text-left border-collapse text-[10px] print:text-[8.5px] leading-tight">
                 <thead>
-                  <tr className="bg-slate-900 text-white text-[10px] font-bold uppercase tracking-wider">
-                    <th className="py-2.5 px-2 text-center border-r border-slate-700">No</th>
-                    <th className="py-2.5 px-2 border-r border-slate-700">Code Item & Rak</th>
-                    <th className="py-2.5 px-2 text-center border-r border-slate-700">Type</th>
-                    <th className="py-2.5 px-3 border-r border-slate-700">Part Name & Part Number</th>
-                    <th className="py-2.5 px-2.5 bg-cyan-950/60 text-cyan-200 border-r border-slate-700">
-                      Code Unit / Model
+                  <tr className="bg-slate-900 text-white text-[9px] print:text-[8px] font-bold uppercase tracking-tight">
+                    <th className="py-2 px-1 text-center border-r border-slate-700 w-6">No</th>
+                    <th className="py-2 px-1.5 border-r border-slate-700 w-20">Code & Rak</th>
+                    <th className="py-2 px-2 border-r border-slate-700">Part Name & PN</th>
+                    <th className="py-2 px-1.5 bg-cyan-950/60 text-cyan-200 border-r border-slate-700 w-24">
+                      Unit / Model
                     </th>
-                    <th className="py-2.5 px-2.5 bg-amber-950/60 text-amber-200 border-r border-slate-700">
-                      Mekanik Pengambil & PIC Logistik
+                    <th className="py-2 px-1.5 bg-amber-950/60 text-amber-200 border-r border-slate-700 w-28">
+                      Mekanik & PIC
                     </th>
-                    <th className="py-2.5 px-2 text-right border-r border-slate-700">Awal</th>
+                    <th className="py-2 px-1 text-right border-r border-slate-700 w-9">Awal</th>
                     {flowFilter !== 'OUT' && (
-                      <th className="py-2.5 px-2 text-right bg-emerald-900 text-emerald-200 border-r border-slate-700">
-                        Masuk (IN)
+                      <th className="py-2 px-1 text-right bg-emerald-900 text-emerald-200 border-r border-slate-700 w-10">
+                        IN
                       </th>
                     )}
                     {flowFilter !== 'IN' && (
-                      <th className="py-2.5 px-2 text-right bg-rose-900 text-rose-200 border-r border-slate-700">
-                        Keluar (OUT)
+                      <th className="py-2 px-1 text-right bg-rose-900 text-rose-200 border-r border-slate-700 w-10">
+                        OUT
                       </th>
                     )}
-                    <th className="py-2.5 px-2 text-right border-r border-slate-700">Akhir</th>
-                    <th className="py-2.5 px-2 text-center border-r border-slate-700">Status</th>
-                    <th className="py-2.5 px-2 text-right border-r border-slate-700">Harga</th>
-                    <th className="py-2.5 px-2.5 text-right">
+                    <th className="py-2 px-1.5 text-right border-r border-slate-700 w-14">Akhir</th>
+                    <th className="py-2 px-1.5 text-right border-r border-slate-700 w-20">Harga</th>
+                    <th className="py-2 px-1.5 text-right w-24">
                       {flowFilter === 'IN'
-                        ? 'Nilai Masuk (Rp)'
+                        ? 'Nilai IN'
                         : flowFilter === 'OUT'
-                        ? 'Nilai Keluar (Rp)'
-                        : 'Total Nilai Stok'}
+                        ? 'Nilai OUT'
+                        : 'Total Nilai'}
                     </th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-200 text-[11px]">
+                <tbody className="divide-y divide-slate-200">
                   {filteredRecapItems
                     .slice((recapPage - 1) * recapPageSize, recapPage * recapPageSize)
                     .map((item, idx) => {
                       const rowNum = (recapPage - 1) * recapPageSize + idx + 1;
                       const itemInTotal = item.inQty + item.adjPlusQty;
-                    const itemOutTotal = item.outQty + item.adjMinusQty;
-                    const displayValue =
-                      flowFilter === 'IN'
-                        ? itemInTotal * item.price
-                        : flowFilter === 'OUT'
-                        ? itemOutTotal * item.price
-                        : item.totalValue;
-                    const latestMeta = latestTxByItem.get(item.codeItem.toUpperCase());
+                      const itemOutTotal = item.outQty + item.adjMinusQty;
+                      const displayValue =
+                        flowFilter === 'IN'
+                          ? itemInTotal * item.price
+                          : flowFilter === 'OUT'
+                          ? itemOutTotal * item.price
+                          : item.totalValue;
+                      const latestMeta = latestTxByItem.get(item.codeItem.toUpperCase());
 
-                    return (
-                      <tr key={item.id} className="even:bg-slate-50/80">
-                        <td className="py-2 px-2 text-center font-mono text-slate-500 border-r border-slate-200">
-                          {rowNum}
-                        </td>
-                        <td className="py-2 px-2 font-mono border-r border-slate-200">
-                          <div className="font-bold text-slate-900">{item.codeItem}</div>
-                          <div className="text-[10px] text-slate-500">Rak: {item.rak}</div>
-                        </td>
-                        <td className="py-2 px-2 text-center font-mono font-bold text-slate-700 border-r border-slate-200">
-                          {item.typeCode}
-                        </td>
-                        <td className="py-2 px-3 border-r border-slate-200">
-                          <div className="font-bold text-slate-900">{item.partName}</div>
-                          <div className="font-mono text-[10px] text-slate-500">
-                            {item.partNumber}
-                          </div>
-                        </td>
-                        <td className="py-2 px-2.5 border-r border-slate-200">
-                          <div className="font-mono font-bold text-slate-900">
-                            {latestMeta?.codeUnit || item.codeUnit || item.modelUnit}
-                          </div>
-                          <div className="text-[10px] text-slate-500">
-                            {item.modelUnit} • {item.supplier}
-                          </div>
-                        </td>
-                        <td className="py-2 px-2.5 border-r border-slate-200">
-                          <div className="font-semibold text-slate-900">
-                            Mekanik: {latestMeta?.mechanic || '-'}
-                          </div>
-                          <div className="text-[10px] text-slate-600">
-                            PIC Logistik: {latestMeta?.picLogistik || preparedBy}
-                          </div>
-                        </td>
-                        <td className="py-2 px-2 text-right font-mono text-slate-700 border-r border-slate-200 tabular-nums">
-                          {item.awalQty}
-                        </td>
-                        {flowFilter !== 'OUT' && (
-                          <td className="py-2 px-2 text-right font-mono font-extrabold text-emerald-700 bg-emerald-50/50 border-r border-slate-200 tabular-nums">
-                            +{itemInTotal}
-                            {item.adjPlusQty > 0 && (
-                              <span className="block text-[9px] font-normal text-slate-500">
-                                (IN:{item.inQty} +{item.adjPlusQty})
-                              </span>
-                            )}
+                      return (
+                        <tr key={item.id} className="even:bg-slate-50/80 align-top">
+                          <td className="py-1.5 px-1 text-center font-mono text-slate-500 border-r border-slate-200">
+                            {rowNum}
                           </td>
-                        )}
-                        {flowFilter !== 'IN' && (
-                          <td className="py-2 px-2 text-right font-mono font-extrabold text-rose-700 bg-rose-50/50 border-r border-slate-200 tabular-nums">
-                            -{itemOutTotal}
-                            {item.adjMinusQty > 0 && (
-                              <span className="block text-[9px] font-normal text-slate-500">
-                                (OUT:{item.outQty} -{item.adjMinusQty})
-                              </span>
-                            )}
+                          <td className="py-1.5 px-1.5 font-mono border-r border-slate-200">
+                            <div className="font-bold text-slate-900">{item.codeItem}</div>
+                            <div className="text-[9px] print:text-[7.5px] text-slate-500">
+                              {item.rak} • {item.typeCode}
+                            </div>
                           </td>
-                        )}
-                        <td className="py-2 px-2 text-right font-mono font-extrabold text-slate-900 border-r border-slate-200 tabular-nums">
-                          {item.akhirQty} {item.unit}
-                        </td>
-                        <td className="py-2 px-2 text-center border-r border-slate-200">
-                          <span
-                            className={`inline-block px-1.5 py-0.5 rounded font-mono text-[9px] font-extrabold ${
-                              item.remark === 'ORDER'
-                                ? 'bg-rose-100 text-rose-800 border border-rose-300'
-                                : item.remark === 'AMAN'
-                                ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
-                                : 'bg-amber-100 text-amber-900 border border-amber-300'
-                            }`}
-                          >
-                            {item.remark}
-                          </span>
-                        </td>
-                        <td className="py-2 px-2 text-right font-mono text-slate-700 border-r border-slate-200 tabular-nums">
-                          {item.price > 0 ? formatRupiah(item.price) : item.priceNote || 'Rp0'}
-                        </td>
-                        <td className="py-2 px-2.5 text-right font-mono font-bold text-slate-900 tabular-nums">
-                          {formatRupiah(displayValue)}
-                        </td>
-                      </tr>
-                    );
-                  })}
+                          <td className="py-1.5 px-2 border-r border-slate-200">
+                            <div className="font-bold text-slate-900 break-words">
+                              {item.partName}
+                            </div>
+                            <div className="font-mono text-[9px] print:text-[7.5px] text-slate-500 break-all">
+                              {item.partNumber}
+                            </div>
+                          </td>
+                          <td className="py-1.5 px-1.5 border-r border-slate-200">
+                            <div className="font-mono font-bold text-slate-900 break-words">
+                              {latestMeta?.codeUnit || item.codeUnit || item.modelUnit}
+                            </div>
+                            <div className="text-[9px] print:text-[7.5px] text-slate-500 break-words">
+                              {item.modelUnit}
+                            </div>
+                          </td>
+                          <td className="py-1.5 px-1.5 border-r border-slate-200">
+                            <div className="font-semibold text-slate-900 break-words">
+                              Mek: {latestMeta?.mechanic || '-'}
+                            </div>
+                            <div className="text-[9px] print:text-[7.5px] text-slate-600 break-words">
+                              PIC: {latestMeta?.picLogistik || preparedBy}
+                            </div>
+                          </td>
+                          <td className="py-1.5 px-1 text-right font-mono text-slate-700 border-r border-slate-200 tabular-nums">
+                            {item.awalQty}
+                          </td>
+                          {flowFilter !== 'OUT' && (
+                            <td className="py-1.5 px-1 text-right font-mono font-extrabold text-emerald-700 bg-emerald-50/50 border-r border-slate-200 tabular-nums">
+                              +{itemInTotal}
+                            </td>
+                          )}
+                          {flowFilter !== 'IN' && (
+                            <td className="py-1.5 px-1 text-right font-mono font-extrabold text-rose-700 bg-rose-50/50 border-r border-slate-200 tabular-nums">
+                              -{itemOutTotal}
+                            </td>
+                          )}
+                          <td className="py-1.5 px-1.5 text-right font-mono border-r border-slate-200 tabular-nums">
+                            <div className="font-extrabold text-slate-900">
+                              {item.akhirQty} {item.unit}
+                            </div>
+                            <span
+                              className={`inline-block mt-0.5 px-1 py-0.2 rounded font-mono text-[7.5px] font-extrabold ${
+                                item.remark === 'ORDER'
+                                  ? 'bg-rose-100 text-rose-800 border border-rose-300'
+                                  : item.remark === 'AMAN'
+                                  ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                                  : 'bg-amber-100 text-amber-900 border border-amber-300'
+                              }`}
+                            >
+                              {item.remark}
+                            </span>
+                          </td>
+                          <td className="py-1.5 px-1.5 text-right font-mono text-slate-700 border-r border-slate-200 tabular-nums whitespace-nowrap">
+                            {item.price > 0 ? formatRupiah(item.price) : item.priceNote || 'Rp0'}
+                          </td>
+                          <td className="py-1.5 px-1.5 text-right font-mono font-bold text-slate-900 tabular-nums whitespace-nowrap">
+                            {formatRupiah(displayValue)}
+                          </td>
+                        </tr>
+                      );
+                    })}
                 </tbody>
                 {/* GRAND TOTAL FOOTER */}
                 <tfoot>
-                  <tr className="bg-slate-900 text-white font-mono text-xs font-extrabold">
-                    <td colSpan={6} className="py-3 px-3 text-right uppercase tracking-wider border-r border-slate-700">
+                  <tr className="bg-slate-900 text-white font-mono text-[10px] print:text-[8.5px] font-extrabold">
+                    <td colSpan={5} className="py-2.5 px-2 text-right uppercase tracking-wider border-r border-slate-700">
                       GRAND TOTAL REKAPITULASI
                     </td>
-                    <td className="py-3 px-2 text-right border-r border-slate-700 tabular-nums">
+                    <td className="py-2.5 px-1 text-right border-r border-slate-700 tabular-nums">
                       {reportStats.recapTotalAwal}
                     </td>
                     {flowFilter !== 'OUT' && (
-                      <td className="py-3 px-2 text-right text-emerald-300 border-r border-slate-700 tabular-nums">
+                      <td className="py-2.5 px-1 text-right text-emerald-300 border-r border-slate-700 tabular-nums">
                         +{reportStats.recapTotalIn}
                       </td>
                     )}
                     {flowFilter !== 'IN' && (
-                      <td className="py-3 px-2 text-right text-rose-300 border-r border-slate-700 tabular-nums">
+                      <td className="py-2.5 px-1 text-right text-rose-300 border-r border-slate-700 tabular-nums">
                         -{reportStats.recapTotalOut}
                       </td>
                     )}
-                    <td className="py-3 px-2 text-right text-amber-300 border-r border-slate-700 tabular-nums">
+                    <td className="py-2.5 px-1.5 text-right text-amber-300 border-r border-slate-700 tabular-nums whitespace-nowrap">
                       {reportStats.recapTotalAkhir} Pcs
                     </td>
-                    <td colSpan={2} className="py-3 px-2 text-right border-r border-slate-700">
-                      TOTAL NILAI:
+                    <td className="py-2.5 px-1.5 text-right border-r border-slate-700">
+                      TOTAL:
                     </td>
-                    <td className="py-3 px-2.5 text-right text-amber-300 tabular-nums">
+                    <td className="py-2.5 px-1.5 text-right text-amber-300 tabular-nums whitespace-nowrap">
                       {formatRupiah(
                         flowFilter === 'IN'
                           ? reportStats.recapInValue
@@ -1360,49 +1367,49 @@ export const PrintReportPanel: React.FC<PrintReportPanelProps> = ({
         )}
 
         {/* 5. OFFICIAL SIGNATURE & VALIDATION BLOCK */}
-        <div className="mt-10 pt-6 border-t-2 border-slate-300 grid grid-cols-3 gap-6 text-center text-xs">
+        <div className="mt-8 pt-4 border-t-2 border-slate-300 grid grid-cols-3 gap-4 text-center text-[11px] print:text-[9.5px] break-inside-avoid">
           <div>
-            <p className="font-bold text-slate-700 uppercase tracking-wider text-[11px]">
+            <p className="font-bold text-slate-700 uppercase tracking-wider text-[10px] print:text-[8.5px]">
               Dibuat Oleh,
             </p>
-            <div className="h-20" />
+            <div className="h-16 print:h-14" />
             <p className="font-extrabold text-slate-900 underline decoration-slate-400 underline-offset-4">
               {preparedBy}
             </p>
-            <p className="text-[11px] text-slate-500 mt-0.5">
+            <p className="text-[10px] print:text-[8.5px] text-slate-500 mt-0.5">
               Admin Inventaris Gudang
             </p>
           </div>
 
           <div>
-            <p className="font-bold text-slate-700 uppercase tracking-wider text-[11px]">
+            <p className="font-bold text-slate-700 uppercase tracking-wider text-[10px] print:text-[8.5px]">
               Diperiksa Oleh (PIC Logistik),
             </p>
-            <div className="h-20" />
+            <div className="h-16 print:h-14" />
             <p className="font-extrabold text-slate-900 underline decoration-slate-400 underline-offset-4">
               {checkedBy}
             </p>
-            <p className="text-[11px] text-slate-500 mt-0.5">
+            <p className="text-[10px] print:text-[8.5px] text-slate-500 mt-0.5">
               PIC Logistik & Operasional
             </p>
           </div>
 
           <div>
-            <p className="font-bold text-slate-700 uppercase tracking-wider text-[11px]">
+            <p className="font-bold text-slate-700 uppercase tracking-wider text-[10px] print:text-[8.5px]">
               Disetujui Oleh,
             </p>
-            <div className="h-20" />
+            <div className="h-16 print:h-14" />
             <p className="font-extrabold text-slate-900 underline decoration-slate-400 underline-offset-4">
               {approvedBy}
             </p>
-            <p className="text-[11px] text-slate-500 mt-0.5">
+            <p className="text-[10px] print:text-[8.5px] text-slate-500 mt-0.5">
               Kepala Gudang / Pimpinan
             </p>
           </div>
         </div>
 
-        <div className="mt-6 pt-3 border-t border-slate-200 flex items-center justify-between text-[10px] font-mono text-slate-500">
-          <span>Dokumen Resmi Gudang {companyName}</span>
+        <div className="mt-5 pt-2.5 border-t border-slate-200 flex items-center justify-between text-[9px] font-mono text-slate-500">
+          <span>Dokumen Resmi Gudang {companyName} (A4 Portrait)</span>
           <span>Author Aplikasi: Irawan</span>
         </div>
       </div>

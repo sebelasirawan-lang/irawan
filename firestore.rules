@@ -47,10 +47,10 @@ service cloud.firestore {
         isValidId(data.codeItem) &&
         data.id == data.codeItem &&
         data.rak is string && data.rak.size() >= 1 && data.rak.size() <= 100 &&
-        data.typeCode is string && data.typeCode.size() <= 10 && data.typeCode in ['CNU', 'SPT', 'PS'] &&
+        data.typeCode is string && data.typeCode.size() <= 10 && data.typeCode in ['CNU', 'SPT', 'PS', 'LIB', 'LUB'] &&
         data.modelUnit is string && data.modelUnit.size() >= 1 && data.modelUnit.size() <= 100 &&
         data.partNumber is string && data.partNumber.size() >= 1 && data.partNumber.size() <= 300 &&
-        data.partName is string && data.partName.size() >= 1 && data.partName.size() <= 150 &&
+        data.partName is string && data.partName.size() >= 1 && data.partName.size() <= 250 &&
         data.codeUnit is string && data.codeUnit.size() >= 1 && data.codeUnit.size() <= 100 &&
         data.tanggalUpdate is string && data.tanggalUpdate.size() >= 1 && data.tanggalUpdate.size() <= 40 &&
         data.tanggalMasuk is string && data.tanggalMasuk.size() >= 1 && data.tanggalMasuk.size() <= 40 &&
@@ -105,10 +105,10 @@ service cloud.firestore {
         data.keys().hasOnly(keys) &&
         isValidId(data.id) &&
         isValidId(data.codeItem) &&
-        data.partName is string && data.partName.size() >= 1 && data.partName.size() <= 150 &&
+        data.partName is string && data.partName.size() >= 1 && data.partName.size() <= 250 &&
         data.partNumber is string && data.partNumber.size() >= 1 && data.partNumber.size() <= 300 &&
         data.rak is string && data.rak.size() >= 1 && data.rak.size() <= 100 &&
-        data.typeCode is string && data.typeCode.size() <= 10 && data.typeCode in ['CNU', 'SPT', 'PS'] &&
+        data.typeCode is string && data.typeCode.size() <= 10 && data.typeCode in ['CNU', 'SPT', 'PS', 'LIB', 'LUB'] &&
         data.txType is string && data.txType.size() <= 15 && data.txType in ['IN', 'OUT', 'ADJ_PLUS', 'ADJ_MINUS'] &&
         data.qty is int && data.qty >= 1 && data.qty <= 100000 &&
         data.prevAkhirQty is int && data.prevAkhirQty >= 0 && data.prevAkhirQty <= 1000000 &&

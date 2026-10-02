@@ -1,4 +1,4 @@
-export type ItemTypeCode = 'CNU' | 'SPT' | 'PS';
+export type ItemTypeCode = 'CNU' | 'SPT' | 'PS' | 'LIB' | 'LUB';
 
 export type StockRemark = 'ORDER' | 'AMAN' | 'OVER';
 
@@ -92,6 +92,8 @@ export const ITEM_TYPE_LABELS: Record<ItemTypeCode, { label: string; desc: strin
   CNU: { label: 'CNU', desc: 'Consumable' },
   SPT: { label: 'SPT', desc: 'Spare Part' },
   PS: { label: 'PS', desc: 'Part Service' },
+  LIB: { label: 'LIB', desc: 'Library / Komponen' },
+  LUB: { label: 'LUB', desc: 'Lubricant / Oli' },
 };
 
 export function calculateAkhirQty(
@@ -105,19 +107,27 @@ export function calculateAkhirQty(
 }
 
 /**
- * Matches the exact formula from the user's warehouse CSV sheet:
- * - akhirQty < maxQty -> 'ORDER'
- * - akhirQty === maxQty -> 'AMAN'
- * - akhirQty > maxQty -> 'OVER'
+ * Calculates stock status (ORDER / AMAN / OVER) from Akhir Qty, Safety Min, and Safety Max:
+ * - akhirQty <= 0 -> 'ORDER'
+ * - minQty === 0 && maxQty === 0 -> 'AMAN' (whenakhirQty > 0)
+ * - akhirQty < minQty -> 'ORDER'
+ * - maxQty > 0 && akhirQty > maxQty -> 'OVER'
+ * - otherwise -> 'AMAN'
  */
 export function calculateRemark(akhirQty: number, minQty: number, maxQty: number): StockRemark {
-  if (akhirQty < minQty || akhirQty < maxQty) {
+  if (akhirQty <= 0) {
     return 'ORDER';
   }
-  if (akhirQty === maxQty) {
+  if (minQty === 0 && maxQty === 0) {
     return 'AMAN';
   }
-  return 'OVER';
+  if (akhirQty < minQty) {
+    return 'ORDER';
+  }
+  if (maxQty > 0 && akhirQty > maxQty) {
+    return 'OVER';
+  }
+  return 'AMAN';
 }
 
 export function calculateTotalValue(akhirQty: number, price: number): number {
