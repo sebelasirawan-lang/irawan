@@ -1,0 +1,106 @@
+{
+  "entities": {
+    "InventoryItem": {
+      "title": "InventoryItem",
+      "description": "Master warehouse item matching the daily warehouse stock ledger.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 64, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "no": { "type": "integer" },
+        "codeItem": { "type": "string", "maxLength": 64, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "rak": { "type": "string", "maxLength": 100 },
+        "typeCode": { "type": "string", "enum": ["CNU", "SPT", "PS"] },
+        "modelUnit": { "type": "string", "maxLength": 100 },
+        "partNumber": { "type": "string", "maxLength": 300 },
+        "partName": { "type": "string", "maxLength": 150 },
+        "codeUnit": { "type": "string", "maxLength": 100 },
+        "tanggalUpdate": { "type": "string", "maxLength": 40 },
+        "tanggalMasuk": { "type": "string", "maxLength": 40 },
+        "tanggalKeluar": { "type": "string", "maxLength": 40 },
+        "supplier": { "type": "string", "maxLength": 120 },
+        "brand": { "type": "string", "maxLength": 100 },
+        "awalQty": { "type": "integer" },
+        "unit": { "type": "string", "maxLength": 20 },
+        "inQty": { "type": "integer" },
+        "adjPlusQty": { "type": "integer" },
+        "outQty": { "type": "integer" },
+        "adjMinusQty": { "type": "integer" },
+        "akhirQty": { "type": "integer" },
+        "minQty": { "type": "integer" },
+        "maxQty": { "type": "integer" },
+        "remark": { "type": "string", "enum": ["ORDER", "AMAN", "OVER"] },
+        "movementStatus": { "type": "string", "enum": ["Fast Moving", "Slow Moving", "Dead Moving"] },
+        "price": { "type": "integer" },
+        "totalValue": { "type": "integer" },
+        "priceNote": { "type": "string", "maxLength": 100 },
+        "status1th": { "type": "string", "maxLength": 50 },
+        "orgId": { "type": "string", "enum": ["gudang_utama"] },
+        "updatedByUid": { "type": "string", "maxLength": 128 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "id", "no", "codeItem", "rak", "typeCode", "modelUnit", "partNumber",
+        "partName", "codeUnit", "tanggalUpdate", "tanggalMasuk", "tanggalKeluar",
+        "supplier", "brand", "awalQty", "unit", "inQty", "adjPlusQty", "outQty",
+        "adjMinusQty", "akhirQty", "minQty", "maxQty", "remark", "movementStatus",
+        "price", "totalValue", "priceNote", "status1th", "orgId", "updatedByUid",
+        "createdAt", "updatedAt"
+      ]
+    },
+    "WarehouseTransaction": {
+      "title": "WarehouseTransaction",
+      "description": "Daily warehouse stock IN/OUT/Adjustment log entry created via QR scanner or admin dashboard.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 64, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "codeItem": { "type": "string", "maxLength": 64, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "partName": { "type": "string", "maxLength": 150 },
+        "partNumber": { "type": "string", "maxLength": 100 },
+        "rak": { "type": "string", "maxLength": 100 },
+        "typeCode": { "type": "string", "enum": ["CNU", "SPT", "PS"] },
+        "txType": { "type": "string", "enum": ["IN", "OUT", "ADJ_PLUS", "ADJ_MINUS"] },
+        "qty": { "type": "integer" },
+        "prevAkhirQty": { "type": "integer" },
+        "newAkhirQty": { "type": "integer" },
+        "picName": { "type": "string", "maxLength": 100 },
+        "unitRef": { "type": "string", "maxLength": 100 },
+        "notes": { "type": "string", "maxLength": 300 },
+        "dateStr": { "type": "string", "maxLength": 40 },
+        "source": { "type": "string", "enum": ["QR_SCANNER", "MANUAL_ADMIN"] },
+        "orgId": { "type": "string", "enum": ["gudang_utama"] },
+        "operatorUid": { "type": "string", "maxLength": 128 },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "id", "codeItem", "partName", "partNumber", "rak", "typeCode",
+        "txType", "qty", "prevAkhirQty", "newAkhirQty", "picName",
+        "unitRef", "notes", "dateStr", "source", "orgId", "operatorUid", "createdAt"
+      ]
+    },
+    "AdminRecord": {
+      "title": "AdminRecord",
+      "description": "Trusted admin registry document.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "maxLength": 128 },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/inventory_items/{itemId}": {
+      "schema": { "$ref": "#/entities/InventoryItem" },
+      "description": "Master warehouse inventory items."
+    },
+    "/transactions/{txId}": {
+      "schema": { "$ref": "#/entities/WarehouseTransaction" },
+      "description": "Real-time daily IN/OUT warehouse transactions."
+    },
+    "/admins/{adminUid}": {
+      "schema": { "$ref": "#/entities/AdminRecord" },
+      "description": "Trusted administrator lookup collection."
+    }
+  }
+}

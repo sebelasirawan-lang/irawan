@@ -1,0 +1,1202 @@
+import React, { useEffect, useMemo, useState } from 'react';
+import * as XLSX from 'xlsx';
+import {
+  ClipboardCheck,
+  Search,
+  QrCode,
+  CheckCircle2,
+  AlertTriangle,
+  ArrowUpRight,
+  ArrowDownLeft,
+  Printer,
+  FileSpreadsheet,
+  RotateCcw,
+  Save,
+  Filter,
+  User,
+  UserCheck,
+  MapPin,
+  Boxes,
+  Check,
+  SlidersHorizontal,
+  ChevronLeft,
+  ChevronRight,
+} from 'lucide-react';
+import {
+  InventoryItem,
+  formatDateDdMmmmYy,
+  formatLedgerDate,
+  formatRupiah,
+  parsePartNumbers,
+  resolveScannedItems,
+} from '../types/warehouse';
+import { ResetDataModal } from './ResetDataModal';
+
+export interface OpnameEntry {
+  codeItem: string;
+  countedQty: number | null; // null = belum dihitung
+  notes: string;
+  checkedAt?: string;
+  synced?: boolean;
+}
+
+export interface OpnameAdjustmentPayload {
+  codeItem: string;
+  physicalQty: number;
+  picLogistik: string;
+  auditorName: string;
+  notes: string;
+}
+
+interface StockOpnamePanelProps {
+  items: InventoryItem[];
+  onApplyAdjustments: (adjustments: OpnameAdjustmentPayload[]) => Promise<void>;
+}
+
+const STORAGE_OPNAME_KEY = 'mme_daily_stock_opname_v1';
+
+export const StockOpnamePanel: React.FC<StockOpnamePanelProps> = ({
+  items,
+  onApplyAdjustments,
+}) => {
+  // Opname Metadata
+  const [opnameDate, setOpnameDate] = useState<string>(() => formatLedgerDate());
+  const [picLogistik, setPicLogistik] = useState<string>('Irawan (PIC Logistik)');
+  const [auditorName, setAuditorName] = useState<string>('Supervisor / Tim Audit');
+  const [headWarehouse, setHeadWarehouse] = useState<string>('Kepala Gudang');
+
+  // Filters & Quick Scan
+  const [searchQuery, setSearchQuery] = useState<string>('');
+  const [rakFilter, setRakFilter] = useState<string>('ALL');
+  const [typeFilter, setTypeFilter] = useState<string>('ALL');
+  const [statusFilter, setStatusFilter] = useState<
+    'ALL' | 'UNCOUNTED' | 'COUNTED' | 'DISCREPANCY' | 'MATCHED'
+  >('ALL');
+  const [quickScanInput, setQuickScanInput] = useState<string>('');
+  const [quickScanFeedback, setQuickScanFeedback] = useState<{
+    type: 'SUCCESS' | 'ERROR';
+    message: string;
+  } | null>(null);
+  const [highlightedCode, setHighlightedCode] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
+  const [isResetOpnameModalOpen, setIsResetOpnameModalOpen] = useState<boolean>(false);
+  const [opnamePageSize, setOpnamePageSize] = useState<number>(100);
+  const [opnamePage, setOpnamePage] = useState<number>(1);
+
+  // Per-item Opname Count State (persisted in localStorage)
+  const [opnameMap, setOpnameMap] = useState<Record<string, OpnameEntry>>(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_OPNAME_KEY);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed && typeof parsed === 'object') return parsed;
+      }
+    } catch {
+      // ignore storage errors
+    }
+    return {};
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_OPNAME_KEY, JSON.stringify(opnameMap));
+    } catch {
+      // ignore storage quota errors
+    }
+  }, [opnameMap]);
+
+  // Unique Raks for Zone/Rack Opname Filtering
+  const uniqueRaks = useMemo(() => {
+    return Array.from(new Set(items.map((i) => i.rak))).sort();
+  }, [items]);
+
+  // Update single item physical count
+  const handleSetCountedQty = (codeItem: string, val: number | null) => {
+    setOpnameMap((prev) => {
+      const existing = prev[codeItem];
+      return {
+        ...prev,
+        [codeItem]: {
+          codeItem,
+          countedQty: val === null ? null : Math.max(0, val),
+          notes: existing?.notes || '',
+          checkedAt: val === null ? undefined : formatLedgerDate(),
+          synced: false,
+        },
+      };
+    });
+  };
+
+  // Update single item opname note
+  const handleSetItemNote = (codeItem: string, notes: string) => {
+    setOpnameMap((prev) => {
+      const existing = prev[codeItem];
+      return {
+        ...prev,
+        [codeItem]: {
+          codeItem,
+          countedQty: existing?.countedQty ?? null,
+          notes,
+          checkedAt: existing?.checkedAt || formatLedgerDate(),
+          synced: existing?.synced || false,
+        },
+      };
+    });
+  };
+
+  // Quick Scan QR / Barcode / Part Number / Code Item handler
+  const handleQuickScanSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const raw = quickScanInput.trim();
+    if (!raw) return;
+
+    const result = resolveScannedItems(raw, items);
+    if (result.items.length === 0) {
+      setQuickScanFeedback({
+        type: 'ERROR',
+        message: `Kode "${raw}" tidak ditemukan pada Code Item, Part Number, maupun Kode Rak.`,
+      });
+      return;
+    }
+
+    const matched = result.items[0];
+    const currentEntry = opnameMap[matched.codeItem];
+    const nextQty =
+      currentEntry?.countedQty !== null && currentEntry?.countedQty !== undefined
+        ? currentEntry.countedQty
+        : matched.akhirQty;
+
+    handleSetCountedQty(matched.codeItem, nextQty);
+    setSearchQuery(matched.codeItem);
+    setOpnamePage(1);
+    setHighlightedCode(matched.codeItem);
+    setQuickScanInput('');
+    setQuickScanFeedback({
+      type: 'SUCCESS',
+      message: `Ditemukan [${matched.codeItem}] ${matched.partName} (Stok Sistem: ${matched.akhirQty} ${matched.unit}). Silakan sesuaikan jumlah fisik di tabel bawah.`,
+    });
+    setTimeout(() => setHighlightedCode(null), 4000);
+  };
+
+  // Filtered Items for Opname Table
+  const filteredItems = useMemo(() => {
+    return items.filter((item) => {
+      const entry = opnameMap[item.codeItem];
+      const isCounted =
+        entry !== undefined && entry.countedQty !== null && entry.countedQty !== undefined;
+      const variance = isCounted ? (entry.countedQty as number) - item.akhirQty : 0;
+
+      if (rakFilter !== 'ALL' && item.rak !== rakFilter) return false;
+      if (typeFilter !== 'ALL' && item.typeCode !== typeFilter) return false;
+
+      if (statusFilter === 'UNCOUNTED' && isCounted) return false;
+      if (statusFilter === 'COUNTED' && !isCounted) return false;
+      if (statusFilter === 'DISCREPANCY' && (!isCounted || variance === 0)) return false;
+      if (statusFilter === 'MATCHED' && (!isCounted || variance !== 0)) return false;
+
+      const q = searchQuery.trim().toLowerCase();
+      if (!q) return true;
+      return (
+        item.codeItem.toLowerCase().includes(q) ||
+        item.partName.toLowerCase().includes(q) ||
+        item.partNumber.toLowerCase().includes(q) ||
+        item.rak.toLowerCase().includes(q) ||
+        item.modelUnit.toLowerCase().includes(q) ||
+        item.codeUnit.toLowerCase().includes(q)
+      );
+    });
+  }, [items, opnameMap, rakFilter, typeFilter, statusFilter, searchQuery]);
+
+  const totalOpnamePages = Math.max(1, Math.ceil(filteredItems.length / opnamePageSize));
+  const safeOpnamePage = Math.min(opnamePage, totalOpnamePages);
+
+  const paginatedOpnameItems = useMemo(() => {
+    const start = (safeOpnamePage - 1) * opnamePageSize;
+    return filteredItems.slice(start, start + opnamePageSize);
+  }, [filteredItems, safeOpnamePage, opnamePageSize]);
+
+  // Opname Summary Statistics
+  const stats = useMemo(() => {
+    let countedCount = 0;
+    let matchedCount = 0;
+    let surplusCount = 0;
+    let shortageCount = 0;
+    let surplusPcs = 0;
+    let shortagePcs = 0;
+    let netVarianceValue = 0;
+
+    for (const item of items) {
+      const entry = opnameMap[item.codeItem];
+      if (entry && entry.countedQty !== null && entry.countedQty !== undefined) {
+        countedCount++;
+        const diff = entry.countedQty - item.akhirQty;
+        if (diff === 0) {
+          matchedCount++;
+        } else if (diff > 0) {
+          surplusCount++;
+          surplusPcs += diff;
+          netVarianceValue += diff * item.price;
+        } else {
+          shortageCount++;
+          shortagePcs += Math.abs(diff);
+          netVarianceValue += diff * item.price;
+        }
+      }
+    }
+
+    const totalSku = items.length;
+    const progressPct = totalSku > 0 ? Math.round((countedCount / totalSku) * 100) : 0;
+
+    return {
+      totalSku,
+      countedCount,
+      uncountedCount: totalSku - countedCount,
+      matchedCount,
+      surplusCount,
+      shortageCount,
+      discrepancyCount: surplusCount + shortageCount,
+      surplusPcs,
+      shortagePcs,
+      netVarianceValue,
+      progressPct,
+    };
+  }, [items, opnameMap]);
+
+  // Bulk Action: Mark all currently filtered items as matching system stock
+  const handleMarkFilteredAsMatch = () => {
+    const today = formatLedgerDate();
+    setOpnameMap((prev) => {
+      const next = { ...prev };
+      for (const item of filteredItems) {
+        next[item.codeItem] = {
+          codeItem: item.codeItem,
+          countedQty: item.akhirQty,
+          notes: prev[item.codeItem]?.notes || 'Sesuai fisik (Opname Harian)',
+          checkedAt: today,
+          synced: prev[item.codeItem]?.synced || false,
+        };
+      }
+      return next;
+    });
+  };
+
+  // Reset opname session
+  const handleResetOpnameSession = () => {
+    setOpnameMap({});
+    localStorage.removeItem(STORAGE_OPNAME_KEY);
+    setQuickScanFeedback(null);
+  };
+
+  // Apply single item adjustment to Master Inventory & Log Harian
+  const handleApplySingleItem = async (item: InventoryItem) => {
+    const entry = opnameMap[item.codeItem];
+    if (!entry || entry.countedQty === null || entry.countedQty === undefined) return;
+    if (entry.countedQty === item.akhirQty) {
+      setOpnameMap((prev) => ({
+        ...prev,
+        [item.codeItem]: {
+          ...entry,
+          synced: true,
+        },
+      }));
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      await onApplyAdjustments([
+        {
+          codeItem: item.codeItem,
+          physicalQty: entry.countedQty,
+          picLogistik: picLogistik.trim() || 'PIC Logistik',
+          auditorName: auditorName.trim() || 'Tim Opname',
+          notes:
+            entry.notes.trim() ||
+            `Koreksi Stock Opname Harian (${item.akhirQty} → ${entry.countedQty} ${item.unit})`,
+        },
+      ]);
+      setOpnameMap((prev) => ({
+        ...prev,
+        [item.codeItem]: {
+          ...entry,
+          synced: true,
+        },
+      }));
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  // Apply all discrepancies to Master Inventory & Log Harian
+  const handleApplyAllDiscrepancies = async () => {
+    const adjustments: OpnameAdjustmentPayload[] = [];
+    for (const item of items) {
+      const entry = opnameMap[item.codeItem];
+      if (
+        entry &&
+        entry.countedQty !== null &&
+        entry.countedQty !== undefined &&
+        entry.countedQty !== item.akhirQty
+      ) {
+        adjustments.push({
+          codeItem: item.codeItem,
+          physicalQty: entry.countedQty,
+          picLogistik: picLogistik.trim() || 'PIC Logistik',
+          auditorName: auditorName.trim() || 'Tim Opname',
+          notes:
+            entry.notes.trim() ||
+            `Koreksi Stock Opname Harian (${item.akhirQty} → ${entry.countedQty} ${item.unit})`,
+        });
+      }
+    }
+
+    if (adjustments.length === 0) return;
+    setIsSubmitting(true);
+    try {
+      await onApplyAdjustments(adjustments);
+      setOpnameMap((prev) => {
+        const next = { ...prev };
+        for (const adj of adjustments) {
+          if (next[adj.codeItem]) {
+            next[adj.codeItem] = {
+              ...next[adj.codeItem],
+              synced: true,
+            };
+          }
+        }
+        return next;
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  // Export Stock Opname Worksheet / Report to Excel (.xlsx)
+  const handleExportOpnameExcel = () => {
+    const wb = XLSX.utils.book_new();
+    const headers = [
+      'No',
+      'Code Item',
+      'Kode Rak',
+      'Kategori',
+      'Part Name',
+      'Part Number',
+      'Code Unit',
+      'Stok Sistem (Akhir Qty)',
+      'Stok Fisik Aktual',
+      'Selisih (Variance)',
+      'Status Opname',
+      'Satuan',
+      'Harga Satuan (Rp)',
+      'Nilai Selisih (Rp)',
+      'PIC Logistik',
+      'Pemeriksa / Saksi',
+      'Catatan Opname',
+    ];
+
+    const rows = filteredItems.map((item, idx) => {
+      const entry = opnameMap[item.codeItem];
+      const hasCount =
+        entry && entry.countedQty !== null && entry.countedQty !== undefined;
+      const physical = hasCount ? (entry.countedQty as number) : '';
+      const diff = hasCount ? (entry.countedQty as number) - item.akhirQty : '';
+      const statusLabel = !hasCount
+        ? 'BELUM DIHITUNG'
+        : diff === 0
+        ? 'COCOK / SESUAI'
+        : (diff as number) > 0
+        ? 'SELISIH LEBIH (+)'
+        : 'SELISIH KURANG (-)';
+
+      return [
+        idx + 1,
+        item.codeItem,
+        item.rak,
+        item.typeCode,
+        item.partName,
+        item.partNumber,
+        item.codeUnit || item.modelUnit,
+        item.akhirQty,
+        physical,
+        diff,
+        statusLabel,
+        item.unit,
+        item.price,
+        hasCount ? (diff as number) * item.price : 0,
+        picLogistik,
+        auditorName,
+        entry?.notes || '',
+      ];
+    });
+
+    const ws = XLSX.utils.aoa_to_sheet([
+      ['PT. MEGA MULTI ENERGI'],
+      [`BERITA ACARA & LEMBAR KERJA STOCK OPNAME HARIAN - ${formatDateDdMmmmYy(opnameDate)}`],
+      [`PIC Logistik: ${picLogistik} | Pemeriksa: ${auditorName} | Author: Irawan`],
+      [],
+      headers,
+      ...rows,
+    ]);
+    XLSX.utils.book_append_sheet(wb, ws, 'Stock_Opname_Harian');
+    XLSX.writeFile(wb, `Berita_Acara_Stock_Opname_${formatDateDdMmmmYy(opnameDate)}.xlsx`);
+  };
+
+  return (
+    <div className="space-y-6">
+      {/* ===================================================================
+          1. TOP KPI & PROGRESS SUMMARY (HIDDEN ON PRINT)
+         =================================================================== */}
+      <div className="no-print grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        {/* Card 1: Progress Opname Harian */}
+        <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 flex flex-col justify-between">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
+              Progress Opname Harian
+            </span>
+            <div className="w-8 h-8 rounded-lg bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-400">
+              <ClipboardCheck className="w-4 h-4" />
+            </div>
+          </div>
+          <div className="my-2">
+            <div className="flex items-baseline justify-between">
+              <span className="text-2xl font-extrabold font-mono text-slate-100">
+                {stats.countedCount} / {stats.totalSku}
+              </span>
+              <span className="text-sm font-mono font-bold text-amber-400">
+                {stats.progressPct}%
+              </span>
+            </div>
+            <div className="w-full h-2 rounded-full bg-slate-800 mt-2 overflow-hidden">
+              <div
+                style={{ width: `${stats.progressPct}%` }}
+                className="h-full bg-amber-500 transition-all duration-300"
+              />
+            </div>
+          </div>
+          <div className="text-[11px] text-slate-400 flex items-center justify-between">
+            <span>Sudah dihitung: {stats.countedCount} SKU</span>
+            <span>Belum: {stats.uncountedCount} SKU</span>
+          </div>
+        </div>
+
+        {/* Card 2: Stok Cocok / Sesuai */}
+        <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 flex flex-col justify-between">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
+              Stok Fisik Cocok (Sesuai)
+            </span>
+            <div className="w-8 h-8 rounded-lg bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
+              <CheckCircle2 className="w-4 h-4" />
+            </div>
+          </div>
+          <div className="my-2 flex items-baseline gap-2">
+            <span className="text-3xl font-extrabold font-mono text-emerald-400">
+              {stats.matchedCount}
+            </span>
+            <span className="text-xs text-slate-400 font-semibold">
+              Item Sesuai Sistem
+            </span>
+          </div>
+          <div className="text-[11px] text-slate-400">
+            Fisik Aktual = Saldo Akhir Sistem (Selisih 0)
+          </div>
+        </div>
+
+        {/* Card 3: Selisih Lebih (+) vs Selisih Kurang (-) */}
+        <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 flex flex-col justify-between">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
+              Temuan Selisih (+ / -)
+            </span>
+            <div className="w-8 h-8 rounded-lg bg-rose-500/15 border border-rose-500/30 flex items-center justify-center text-rose-400">
+              <SlidersHorizontal className="w-4 h-4" />
+            </div>
+          </div>
+          <div className="my-2 grid grid-cols-2 gap-2">
+            <div className="bg-blue-500/10 border border-blue-500/20 rounded-lg px-2.5 py-1.5">
+              <span className="text-[10px] text-blue-400 font-semibold flex items-center gap-1">
+                <ArrowDownLeft className="w-3 h-3" /> LEBIH (+ADJ)
+              </span>
+              <span className="font-mono text-sm font-extrabold text-blue-300">
+                {stats.surplusCount} SKU (+{stats.surplusPcs})
+              </span>
+            </div>
+            <div className="bg-rose-500/10 border border-rose-500/20 rounded-lg px-2.5 py-1.5">
+              <span className="text-[10px] text-rose-400 font-semibold flex items-center gap-1">
+                <ArrowUpRight className="w-3 h-3" /> KURANG (-ADJ)
+              </span>
+              <span className="font-mono text-sm font-extrabold text-rose-300">
+                {stats.shortageCount} SKU (-{stats.shortagePcs})
+              </span>
+            </div>
+          </div>
+          <div className="text-[11px] text-slate-400">
+            Total {stats.discrepancyCount} SKU memiliki selisih fisik
+          </div>
+        </div>
+
+        {/* Card 4: Nilai Finansial Selisih & Tombol Posting */}
+        <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 flex flex-col justify-between">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
+              Estimasi Nilai Selisih
+            </span>
+            <div className="w-8 h-8 rounded-lg bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-400">
+              <AlertTriangle className="w-4 h-4" />
+            </div>
+          </div>
+          <div className="my-2">
+            <span
+              className={`text-2xl font-extrabold font-mono ${
+                stats.netVarianceValue > 0
+                  ? 'text-blue-400'
+                  : stats.netVarianceValue < 0
+                  ? 'text-rose-400'
+                  : 'text-emerald-400'
+              }`}
+            >
+              {stats.netVarianceValue > 0 ? '+' : ''}
+              {formatRupiah(stats.netVarianceValue)}
+            </span>
+          </div>
+          <div>
+            <button
+              type="button"
+              disabled={stats.discrepancyCount === 0 || isSubmitting}
+              onClick={handleApplyAllDiscrepancies}
+              className="w-full py-1.5 px-3 rounded-lg bg-amber-500 hover:bg-amber-400 disabled:opacity-40 disabled:cursor-not-allowed text-slate-950 font-extrabold text-xs transition cursor-pointer flex items-center justify-center gap-1.5"
+            >
+              <Save className="w-3.5 h-3.5" />
+              {isSubmitting
+                ? 'Menyinkronkan...'
+                : `Sesuaikan Semua Selisih (${stats.discrepancyCount} SKU)`}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* ===================================================================
+          2. OPNAME CONTROL & QUICK SCAN BAR (HIDDEN ON PRINT)
+         =================================================================== */}
+      <div className="no-print bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl space-y-4">
+        <div className="flex flex-wrap items-center justify-between gap-4 pb-4 border-b border-slate-800">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-400">
+              <ClipboardCheck className="w-5 h-5" />
+            </div>
+            <div>
+              <h2 className="text-base font-bold text-slate-100">
+                Terminal Proses Stock Opname Harian Gudang
+              </h2>
+              <p className="text-xs text-slate-400">
+                Bandingkan stok sistem vs stok fisik aktual per Rak/Part Number, catat temuan, dan sesuaikan otomatis ke Master Gudang & Log Harian
+              </p>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={handleMarkFilteredAsMatch}
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/40 text-emerald-300 text-xs font-bold transition cursor-pointer"
+              title="Set stok fisik = stok sistem untuk semua barang yang sedang tampil"
+            >
+              <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+              Tandai Semua Tampil Cocok ({filteredItems.length})
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setIsResetOpnameModalOpen(true)}
+              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold transition cursor-pointer"
+              title="Reset hasil input hitung fisik harian (Wajib Password)"
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
+              Reset Sesi Opname
+            </button>
+
+            <button
+              type="button"
+              onClick={handleExportOpnameExcel}
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-emerald-300 text-xs font-bold transition cursor-pointer"
+            >
+              <FileSpreadsheet className="w-4 h-4 text-emerald-400" />
+              Export Excel Opname
+            </button>
+
+            <button
+              type="button"
+              onClick={() => window.print()}
+              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-extrabold transition cursor-pointer shadow-md"
+            >
+              <Printer className="w-4 h-4" />
+              Cetak Berita Acara Opname
+            </button>
+          </div>
+        </div>
+
+        {/* Metadata Petugas Opname & Quick Scan Bar */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-3">
+          <div className="lg:col-span-5">
+            <label className="block text-[11px] font-bold uppercase tracking-wider text-amber-400 mb-1">
+              Scan Cepat QR / Ketik Part Number, Code Item, atau Rak
+            </label>
+            <form onSubmit={handleQuickScanSubmit} className="flex gap-2">
+              <div className="relative flex-1">
+                <QrCode className="w-4 h-4 text-amber-400 absolute left-3 top-2.5" />
+                <input
+                  type="text"
+                  value={quickScanInput}
+                  onChange={(e) => setQuickScanInput(e.target.value)}
+                  placeholder="Scan/ketik DPS-2105, ZMME-0000203, atau 101A01 lalu Enter..."
+                  className="w-full bg-slate-950 border border-slate-800 focus:border-amber-500 rounded-xl pl-9 pr-3 py-2 text-xs font-mono text-slate-100 outline-none"
+                />
+              </div>
+              <button
+                type="submit"
+                className="px-4 py-2 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 text-amber-300 font-bold text-xs transition cursor-pointer whitespace-nowrap"
+              >
+                eksekusi Scan
+              </button>
+            </form>
+          </div>
+
+          <div className="lg:col-span-2">
+            <label className="block text-[11px] font-semibold text-slate-400 mb-1">
+              Tanggal Opname (dd-mmmm-yy)
+            </label>
+            <input
+              type="text"
+              value={opnameDate}
+              onChange={(e) => setOpnameDate(e.target.value)}
+              onBlur={() => setOpnameDate(formatDateDdMmmmYy(opnameDate, new Date()))}
+              className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs font-mono text-amber-300 outline-none"
+            />
+          </div>
+
+          <div className="lg:col-span-2">
+            <label className="block text-[11px] font-semibold text-slate-400 mb-1">
+              PIC Logistik (Petugas)
+            </label>
+            <div className="relative">
+              <User className="w-3.5 h-3.5 text-slate-500 absolute left-2.5 top-2.5" />
+              <input
+                type="text"
+                value={picLogistik}
+                onChange={(e) => setPicLogistik(e.target.value)}
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-8 pr-2.5 py-2 text-xs text-slate-200 outline-none"
+              />
+            </div>
+          </div>
+
+          <div className="lg:col-span-3">
+            <label className="block text-[11px] font-semibold text-slate-400 mb-1">
+              Pemeriksa / Saksi Opname
+            </label>
+            <div className="relative">
+              <UserCheck className="w-3.5 h-3.5 text-slate-500 absolute left-2.5 top-2.5" />
+              <input
+                type="text"
+                value={auditorName}
+                onChange={(e) => setAuditorName(e.target.value)}
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-8 pr-2.5 py-2 text-xs text-slate-200 outline-none"
+              />
+            </div>
+          </div>
+        </div>
+
+        {quickScanFeedback && (
+          <div
+            className={`p-3 rounded-xl border text-xs flex items-center justify-between gap-2 ${
+              quickScanFeedback.type === 'SUCCESS'
+                ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300'
+                : 'bg-rose-500/10 border-rose-500/30 text-rose-300'
+            }`}
+          >
+            <span>{quickScanFeedback.message}</span>
+            <button
+              type="button"
+              onClick={() => setQuickScanFeedback(null)}
+              className="text-[11px] underline opacity-80 hover:opacity-100 cursor-pointer"
+            >
+              Tutup
+            </button>
+          </div>
+        )}
+
+        {/* Search & Filter Strip */}
+        <div className="pt-3 border-t border-slate-800/80 flex flex-wrap items-center justify-between gap-3">
+          <div className="flex flex-wrap items-center gap-2.5 flex-1">
+            <div className="relative flex-1 min-w-[220px] max-w-sm">
+              <Search className="w-4 h-4 text-slate-500 absolute left-3 top-2.5" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Filter Code Item, Part Name, PN, Rak, Code Unit..."
+                className="w-full bg-slate-950 border border-slate-800 focus:border-amber-500 rounded-lg pl-9 pr-3 py-2 text-xs text-slate-100 outline-none"
+              />
+              {searchQuery && (
+                <button
+                  type="button"
+                  onClick={() => setSearchQuery('')}
+                  className="absolute right-2.5 top-2 text-[11px] text-slate-400 hover:text-slate-200 cursor-pointer"
+                >
+                  Reset
+                </button>
+              )}
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <Filter className="w-3.5 h-3.5 text-slate-500" />
+              <select
+                value={rakFilter}
+                onChange={(e) => setRakFilter(e.target.value)}
+                className="bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-2 text-xs text-slate-200 outline-none"
+              >
+                <option value="ALL">Semua Lokasi Rak ({uniqueRaks.length})</option>
+                {uniqueRaks.map((r) => (
+                  <option key={r} value={r}>
+                    Rak: {r}
+                  </option>
+                ))}
+              </select>
+
+              <select
+                value={typeFilter}
+                onChange={(e) => setTypeFilter(e.target.value)}
+                className="bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-2 text-xs text-slate-200 outline-none"
+              >
+                <option value="ALL">Semua Kategori (CNU/SPT/PS)</option>
+                <option value="CNU">CNU - Consumable</option>
+                <option value="SPT">SPT - Spare Part</option>
+                <option value="PS">PS - Part Service</option>
+              </select>
+
+              <select
+                value={statusFilter}
+                onChange={(e) =>
+                  setStatusFilter(e.target.value as typeof statusFilter)
+                }
+                className="bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-2 text-xs text-slate-200 outline-none"
+              >
+                <option value="ALL">Semua Status Opname ({items.length})</option>
+                <option value="UNCOUNTED">
+                  Belum Dihitung ({stats.uncountedCount})
+                </option>
+                <option value="COUNTED">Sudah Dihitung ({stats.countedCount})</option>
+                <option value="DISCREPANCY">
+                  Hanya Selisih +/- ({stats.discrepancyCount})
+                </option>
+                <option value="MATCHED">Sudah Cocok ({stats.matchedCount})</option>
+              </select>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* ===================================================================
+          3. INTERACTIVE DAILY STOCK OPNAME WORKSHEET TABLE (SCREEN)
+         =================================================================== */}
+      <div className="no-print bg-slate-900 border border-slate-800 rounded-xl overflow-hidden shadow-xl">
+        {/* Pagination Strip Top */}
+        <div className="px-4 py-3 bg-slate-950/90 border-b border-slate-800 flex flex-wrap items-center justify-between gap-3 text-xs">
+          <div className="font-mono text-slate-400">
+            Menampilkan{' '}
+            <strong className="text-slate-100">
+              {filteredItems.length === 0
+                ? 0
+                : (safeOpnamePage - 1) * opnamePageSize + 1}
+              –{Math.min(safeOpnamePage * opnamePageSize, filteredItems.length)}
+            </strong>{' '}
+            dari{' '}
+            <strong className="text-amber-300">
+              {filteredItems.length.toLocaleString('id-ID')}
+            </strong>{' '}
+            Item Opname
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2.5">
+            <label className="text-slate-400 flex items-center gap-1.5">
+              <span>Baris per Halaman:</span>
+              <select
+                value={opnamePageSize}
+                onChange={(e) => {
+                  setOpnamePageSize(Number(e.target.value));
+                  setOpnamePage(1);
+                }}
+                className="bg-slate-900 border border-slate-700 rounded-lg px-2 py-1 text-xs font-mono text-amber-300 outline-none"
+              >
+                <option value={50}>50 Item</option>
+                <option value={100}>100 Item</option>
+                <option value={250}>250 Item</option>
+                <option value={500}>500 Item</option>
+                <option value={3500}>Semua ({items.length})</option>
+              </select>
+            </label>
+
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                disabled={safeOpnamePage <= 1}
+                onClick={() => setOpnamePage((p) => Math.max(1, p - 1))}
+                className="px-2.5 py-1 rounded-lg bg-slate-900 hover:bg-slate-800 disabled:opacity-40 border border-slate-700 text-slate-200 flex items-center gap-1 cursor-pointer"
+              >
+                <ChevronLeft className="w-3.5 h-3.5" />
+                Sebelumnya
+              </button>
+              <span className="px-2.5 py-1 font-mono text-slate-300">
+                Hal <strong className="text-amber-400">{safeOpnamePage}</strong> /{' '}
+                {totalOpnamePages}
+              </span>
+              <button
+                type="button"
+                disabled={safeOpnamePage >= totalOpnamePages}
+                onClick={() =>
+                  setOpnamePage((p) => Math.min(totalOpnamePages, p + 1))
+                }
+                className="px-2.5 py-1 rounded-lg bg-slate-900 hover:bg-slate-800 disabled:opacity-40 border border-slate-700 text-slate-200 flex items-center gap-1 cursor-pointer"
+              >
+                Berikutnya
+                <ChevronRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div className="overflow-x-auto">
+          <table className="w-full text-left border-collapse">
+            <thead>
+              <tr className="bg-slate-950 border-b border-slate-800 text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                <th className="py-3 px-3 text-center">No</th>
+                <th className="py-3 px-3">Code Item & Rak</th>
+                <th className="py-3 px-3">Part Name & Part Number</th>
+                <th className="py-3 px-3">Code Unit / Model</th>
+                <th className="py-3 px-3 text-right bg-slate-900/70">
+                  Stok Sistem
+                </th>
+                <th className="py-3 px-3 text-center bg-amber-950/25 text-amber-300">
+                  Input Stok Fisik Aktual
+                </th>
+                <th className="py-3 px-3 text-center">Selisih (Variance)</th>
+                <th className="py-3 px-3">Catatan Temuan Opname</th>
+                <th className="py-3 px-3 text-center">Aksi Opname</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-800/70 text-xs">
+              {paginatedOpnameItems.map((item) => {
+                const entry = opnameMap[item.codeItem];
+                const hasCount =
+                  entry !== undefined &&
+                  entry.countedQty !== null &&
+                  entry.countedQty !== undefined;
+                const countedVal = hasCount ? (entry.countedQty as number) : '';
+                const variance = hasCount
+                  ? (entry.countedQty as number) - item.akhirQty
+                  : null;
+                const isHighlighted = highlightedCode === item.codeItem;
+
+                return (
+                  <tr
+                    key={item.id}
+                    className={`transition ${
+                      isHighlighted
+                        ? 'bg-amber-500/20 ring-1 ring-amber-400'
+                        : hasCount && variance !== 0
+                        ? 'bg-rose-950/15 hover:bg-rose-950/25'
+                        : hasCount && variance === 0
+                        ? 'bg-emerald-950/10 hover:bg-slate-800/50'
+                        : 'hover:bg-slate-800/50'
+                    }`}
+                  >
+                    <td className="py-3 px-3 text-center font-mono text-slate-400">
+                      {item.no}
+                    </td>
+                    <td className="py-3 px-3 font-mono">
+                      <div className="font-bold text-amber-400">{item.codeItem}</div>
+                      <div className="text-[11px] text-slate-400 flex items-center gap-1 mt-0.5">
+                        <MapPin className="w-3 h-3 text-emerald-400" />
+                        {item.rak} ({item.typeCode})
+                      </div>
+                    </td>
+                    <td className="py-3 px-3">
+                      <div className="font-bold text-slate-100">{item.partName}</div>
+                      <div className="flex flex-wrap items-center gap-1 mt-0.5">
+                        {parsePartNumbers(item.partNumber).map((pn, idx) => (
+                          <span
+                            key={`${item.codeItem}-opn-${idx}`}
+                            className="px-1.5 py-0.5 rounded bg-slate-800 font-mono text-[10px] text-cyan-300"
+                          >
+                            {idx === 0 ? `PN: ${pn}` : `Ref: ${pn}`}
+                          </span>
+                        ))}
+                      </div>
+                    </td>
+                    <td className="py-3 px-3">
+                      <div className="font-mono font-semibold text-slate-200">
+                        {item.codeUnit || item.modelUnit}
+                      </div>
+                      <div className="text-[11px] text-slate-400">{item.modelUnit}</div>
+                    </td>
+                    <td className="py-3 px-3 text-right font-mono bg-slate-900/50">
+                      <span className="text-sm font-extrabold text-slate-100">
+                        {item.akhirQty}
+                      </span>{' '}
+                      <span className="text-[10px] text-slate-400">{item.unit}</span>
+                    </td>
+
+                    {/* Input Stok Fisik Aktual */}
+                    <td className="py-3 px-3 bg-amber-950/10">
+                      <div className="flex items-center justify-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            handleSetCountedQty(
+                              item.codeItem,
+                              Math.max(
+                                0,
+                                (hasCount ? (entry.countedQty as number) : item.akhirQty) - 1
+                              )
+                            )
+                          }
+                          className="w-7 h-7 rounded bg-slate-950 hover:bg-slate-800 border border-slate-700 font-mono font-bold text-slate-200 cursor-pointer"
+                        >
+                          -
+                        </button>
+                        <input
+                          type="number"
+                          min={0}
+                          value={countedVal}
+                          placeholder={String(item.akhirQty)}
+                          onChange={(e) => {
+                            const raw = e.target.value;
+                            if (raw === '') {
+                              handleSetCountedQty(item.codeItem, null);
+                            } else {
+                              handleSetCountedQty(
+                                item.codeItem,
+                                Math.max(0, parseInt(raw, 10) || 0)
+                              );
+                            }
+                          }}
+                          className="w-20 h-8 bg-slate-950 border border-slate-700 focus:border-amber-500 rounded-lg text-center font-mono text-xs font-extrabold text-amber-300 outline-none"
+                        />
+                        <button
+                          type="button"
+                          onClick={() =>
+                            handleSetCountedQty(
+                              item.codeItem,
+                              (hasCount ? (entry.countedQty as number) : item.akhirQty) + 1
+                            )
+                          }
+                          className="w-7 h-7 rounded bg-slate-950 hover:bg-slate-800 border border-slate-700 font-mono font-bold text-slate-200 cursor-pointer"
+                        >
+                          +
+                        </button>
+                      </div>
+                    </td>
+
+                    {/* Variance / Selisih Badge */}
+                    <td className="py-3 px-3 text-center font-mono">
+                      {!hasCount ? (
+                        <span className="px-2 py-0.5 rounded bg-slate-800 text-slate-400 text-[10px]">
+                          BELUM DIHITUNG
+                        </span>
+                      ) : variance === 0 ? (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 text-[10px] font-extrabold">
+                          <Check className="w-3 h-3" /> COCOK (0)
+                        </span>
+                      ) : (variance as number) > 0 ? (
+                        <div>
+                          <span className="inline-block px-2 py-0.5 rounded bg-blue-500/20 border border-blue-500/40 text-blue-300 text-[10px] font-extrabold">
+                            +{variance} {item.unit} (+ADJ)
+                          </span>
+                          <div className="text-[10px] text-blue-400 mt-0.5">
+                            +{formatRupiah((variance as number) * item.price)}
+                          </div>
+                        </div>
+                      ) : (
+                        <div>
+                          <span className="inline-block px-2 py-0.5 rounded bg-rose-500/20 border border-rose-500/40 text-rose-300 text-[10px] font-extrabold">
+                            {variance} {item.unit} (-ADJ)
+                          </span>
+                          <div className="text-[10px] text-rose-400 mt-0.5">
+                            {formatRupiah((variance as number) * item.price)}
+                          </div>
+                        </div>
+                      )}
+                    </td>
+
+                    {/* Catatan Temuan Opname */}
+                    <td className="py-3 px-3">
+                      <input
+                        type="text"
+                        value={entry?.notes || ''}
+                        onChange={(e) => handleSetItemNote(item.codeItem, e.target.value)}
+                        placeholder="Catatan fisik / rak / kondisi..."
+                        className="w-full min-w-[160px] bg-slate-950 border border-slate-800 focus:border-amber-500 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 outline-none"
+                      />
+                    </td>
+
+                    {/* Tombol Aksi Cepat Per Baris */}
+                    <td className="py-3 px-3 text-center">
+                      <div className="flex items-center justify-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => handleSetCountedQty(item.codeItem, item.akhirQty)}
+                          className={`px-2.5 py-1 rounded-lg font-bold text-[11px] transition cursor-pointer ${
+                            hasCount && variance === 0
+                              ? 'bg-emerald-500 text-slate-950'
+                              : 'bg-slate-800 hover:bg-slate-700 text-emerald-300 border border-slate-700'
+                          }`}
+                          title="Set Fisik = Stok Sistem"
+                        >
+                          Sesuai
+                        </button>
+
+                        {hasCount && variance !== 0 && (
+                          <button
+                            type="button"
+                            disabled={isSubmitting}
+                            onClick={() => handleApplySingleItem(item)}
+                            className="px-2.5 py-1 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 font-extrabold text-[11px] transition cursor-pointer whitespace-nowrap"
+                            title="Terapkan koreksi selisih ini ke Stok Master & Log Harian"
+                          >
+                            Sesuaikan Stok
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* ===================================================================
+          4. PRINTABLE OFFICIAL BERITA ACARA STOCK OPNAME HARIAN
+         =================================================================== */}
+      <div className="hidden print:block bg-white text-slate-900 p-0">
+        <div className="border-b-4 border-slate-900 pb-4 mb-5 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-11 h-11 rounded-xl bg-slate-900 text-amber-400 flex items-center justify-center font-extrabold border border-slate-900">
+              <Boxes className="w-6 h-6" />
+            </div>
+            <div>
+              <div className="text-[10px] font-mono font-bold uppercase tracking-widest text-slate-600">
+                PT. MEGA MULTI ENERGI • AUTHOR: IRAWAN
+              </div>
+              <h1 className="text-xl font-extrabold text-slate-900">
+                BERITA ACARA STOCK OPNAME HARIAN GUDANG
+              </h1>
+              <p className="text-xs text-slate-600">
+                Tanggal Opname: <strong>{formatDateDdMmmmYy(opnameDate)}</strong> • PIC Logistik:{' '}
+                <strong>{picLogistik}</strong> • Pemeriksa: <strong>{auditorName}</strong>
+              </p>
+            </div>
+          </div>
+          <div className="text-right font-mono text-xs">
+            <div className="font-bold">
+              Diperiksa: {stats.countedCount} / {stats.totalSku} SKU
+            </div>
+            <div>
+              Cocok: {stats.matchedCount} | Selisih: {stats.discrepancyCount} SKU
+            </div>
+          </div>
+        </div>
+
+        <table className="w-full text-left border-collapse text-[11px] border border-slate-300">
+          <thead>
+            <tr className="bg-slate-900 text-white text-[10px] uppercase">
+              <th className="py-2 px-2 border-r border-slate-700 text-center">No</th>
+              <th className="py-2 px-2 border-r border-slate-700">Code Item & Rak</th>
+              <th className="py-2 px-2 border-r border-slate-700">Part Name & PN</th>
+              <th className="py-2 px-2 border-r border-slate-700">Code Unit</th>
+              <th className="py-2 px-2 border-r border-slate-700 text-right">Stok Sistem</th>
+              <th className="py-2 px-2 border-r border-slate-700 text-right">Stok Fisik</th>
+              <th className="py-2 px-2 border-r border-slate-700 text-center">Selisih</th>
+              <th className="py-2 px-2">Catatan Opname</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-200">
+            {paginatedOpnameItems.map((item, idx) => {
+              const entry = opnameMap[item.codeItem];
+              const hasCount =
+                entry !== undefined &&
+                entry.countedQty !== null &&
+                entry.countedQty !== undefined;
+              const diff = hasCount
+                ? (entry.countedQty as number) - item.akhirQty
+                : null;
+              return (
+                <tr key={item.id} className="even:bg-slate-50">
+                  <td className="py-1.5 px-2 text-center font-mono border-r border-slate-200">
+                    {idx + 1}
+                  </td>
+                  <td className="py-1.5 px-2 font-mono border-r border-slate-200">
+                    <strong>{item.codeItem}</strong> ({item.rak})
+                  </td>
+                  <td className="py-1.5 px-2 border-r border-slate-200">
+                    <div className="font-bold">{item.partName}</div>
+                    <div className="font-mono text-[10px] text-slate-600">
+                      {item.partNumber}
+                    </div>
+                  </td>
+                  <td className="py-1.5 px-2 font-mono border-r border-slate-200">
+                    {item.codeUnit || item.modelUnit}
+                  </td>
+                  <td className="py-1.5 px-2 text-right font-mono border-r border-slate-200">
+                    {item.akhirQty} {item.unit}
+                  </td>
+                  <td className="py-1.5 px-2 text-right font-mono font-bold border-r border-slate-200">
+                    {hasCount ? `${entry.countedQty} ${item.unit}` : '.......'}
+                  </td>
+                  <td className="py-1.5 px-2 text-center font-mono font-bold border-r border-slate-200">
+                    {!hasCount
+                      ? '-'
+                      : diff === 0
+                      ? 'COCOK (0)'
+                      : (diff as number) > 0
+                      ? `+${diff}`
+                      : `${diff}`}
+                  </td>
+                  <td className="py-1.5 px-2">{entry?.notes || '-'}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+
+        <div className="mt-8 pt-4 border-t-2 border-slate-300 grid grid-cols-3 gap-6 text-center text-xs">
+          <div>
+            <p className="font-bold uppercase text-[10px]">Dilaksanakan Oleh (PIC Logistik),</p>
+            <div className="h-16" />
+            <p className="font-extrabold underline">{picLogistik}</p>
+          </div>
+          <div>
+            <p className="font-bold uppercase text-[10px]">Diperiksa / Saksi Opname,</p>
+            <div className="h-16" />
+            <p className="font-extrabold underline">{auditorName}</p>
+          </div>
+          <div>
+            <p className="font-bold uppercase text-[10px]">Disetujui Oleh (Kepala Gudang),</p>
+            <div className="h-16" />
+            <p className="font-extrabold underline">{headWarehouse}</p>
+          </div>
+        </div>
+      </div>
+
+      {isResetOpnameModalOpen && (
+        <ResetDataModal
+          title="Otorisasi Reset Sesi Stock Opname"
+          description="Tindakan ini akan mengosongkan kembali seluruh input perhitungan fisik pada sesi Stock Opname Harian saat ini."
+          confirmLabel="Konfirmasi Reset Opname"
+          onClose={() => setIsResetOpnameModalOpen(false)}
+          onConfirmReset={handleResetOpnameSession}
+        />
+      )}
+    </div>
+  );
+};

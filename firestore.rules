@@ -1,0 +1,201 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 1. Global Safety Net (Default-Deny)
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Global Hardened Helpers
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 64 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+    function incoming() {
+      return request.resource.data;
+    }
+    function existing() {
+      return resource.data;
+    }
+    function isSignedIn() {
+      return request.auth != null;
+    }
+    function isVerifiedUser() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+    function isAdmin() {
+      return isVerifiedUser() && (
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid)) ||
+        request.auth.token.email == "sebelasirawan@gmail.com"
+      );
+    }
+
+    // Validation Blueprint Helpers: InventoryItem
+    function isValidInventoryKeys(data) {
+      let keys = [
+        'id', 'no', 'codeItem', 'rak', 'typeCode', 'modelUnit', 'partNumber',
+        'partName', 'codeUnit', 'tanggalUpdate', 'tanggalMasuk', 'tanggalKeluar',
+        'supplier', 'brand', 'awalQty', 'unit', 'inQty', 'adjPlusQty', 'outQty',
+        'adjMinusQty', 'akhirQty', 'minQty', 'maxQty', 'remark', 'movementStatus',
+        'price', 'totalValue', 'priceNote', 'status1th', 'orgId', 'updatedByUid',
+        'createdAt', 'updatedAt'
+      ];
+      return data.keys().hasAll(keys) && data.keys().hasOnly(keys);
+    }
+
+    function isValidInventoryStrings(data) {
+      return isValidId(data.id) &&
+        isValidId(data.codeItem) &&
+        data.id == data.codeItem &&
+        data.rak is string && data.rak.size() >= 1 && data.rak.size() <= 100 &&
+        data.typeCode is string && data.typeCode.size() <= 10 && data.typeCode in ['CNU', 'SPT', 'PS'] &&
+        data.modelUnit is string && data.modelUnit.size() >= 1 && data.modelUnit.size() <= 100 &&
+        data.partNumber is string && data.partNumber.size() >= 1 && data.partNumber.size() <= 300 &&
+        data.partName is string && data.partName.size() >= 1 && data.partName.size() <= 150 &&
+        data.codeUnit is string && data.codeUnit.size() >= 1 && data.codeUnit.size() <= 100 &&
+        data.tanggalUpdate is string && data.tanggalUpdate.size() >= 1 && data.tanggalUpdate.size() <= 40 &&
+        data.tanggalMasuk is string && data.tanggalMasuk.size() >= 1 && data.tanggalMasuk.size() <= 40 &&
+        data.tanggalKeluar is string && data.tanggalKeluar.size() >= 1 && data.tanggalKeluar.size() <= 40 &&
+        data.supplier is string && data.supplier.size() >= 1 && data.supplier.size() <= 120 &&
+        data.brand is string && data.brand.size() >= 1 && data.brand.size() <= 100;
+    }
+
+    function isValidInventoryMeta(data) {
+      return data.unit is string && data.unit.size() >= 1 && data.unit.size() <= 20 &&
+        data.remark is string && data.remark.size() <= 10 && data.remark in ['ORDER', 'AMAN', 'OVER'] &&
+        data.movementStatus is string && data.movementStatus.size() <= 20 && data.movementStatus in ['Fast Moving', 'Slow Moving', 'Dead Moving'] &&
+        data.priceNote is string && data.priceNote.size() <= 100 &&
+        data.status1th is string && data.status1th.size() >= 1 && data.status1th.size() <= 50 &&
+        data.orgId is string && data.orgId.size() <= 32 && data.orgId == 'gudang_utama' &&
+        data.updatedByUid is string && data.updatedByUid.size() >= 1 && data.updatedByUid.size() <= 128 &&
+        data.updatedByUid == request.auth.uid &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidInventoryNumbers(data) {
+      return data.no is int && data.no >= 1 && data.no <= 999999 &&
+        data.awalQty is int && data.awalQty >= 0 && data.awalQty <= 1000000 &&
+        data.inQty is int && data.inQty >= 0 && data.inQty <= 1000000 &&
+        data.adjPlusQty is int && data.adjPlusQty >= 0 && data.adjPlusQty <= 1000000 &&
+        data.outQty is int && data.outQty >= 0 && data.outQty <= 1000000 &&
+        data.adjMinusQty is int && data.adjMinusQty >= 0 && data.adjMinusQty <= 1000000 &&
+        data.akhirQty is int && data.akhirQty >= 0 && data.akhirQty <= 1000000 &&
+        data.akhirQty == (data.awalQty + data.inQty + data.adjPlusQty - data.outQty - data.adjMinusQty) &&
+        data.minQty is int && data.minQty >= 0 && data.minQty <= 1000000 &&
+        data.maxQty is int && data.maxQty >= 0 && data.maxQty <= 1000000 &&
+        data.price is int && data.price >= 0 && data.price <= 1000000000 &&
+        data.totalValue is int && data.totalValue >= 0 && data.totalValue <= 2000000000;
+    }
+
+    function isValidInventoryItem(data) {
+      return isValidInventoryKeys(data) &&
+        isValidInventoryStrings(data) &&
+        isValidInventoryMeta(data) &&
+        isValidInventoryNumbers(data);
+    }
+
+    // Validation Blueprint: WarehouseTransaction
+    function isValidTransaction(data) {
+      let keys = [
+        'id', 'codeItem', 'partName', 'partNumber', 'rak', 'typeCode',
+        'txType', 'qty', 'prevAkhirQty', 'newAkhirQty', 'picName',
+        'unitRef', 'notes', 'dateStr', 'source', 'orgId', 'operatorUid', 'createdAt'
+      ];
+      return data.keys().hasAll(keys) &&
+        data.keys().hasOnly(keys) &&
+        isValidId(data.id) &&
+        isValidId(data.codeItem) &&
+        data.partName is string && data.partName.size() >= 1 && data.partName.size() <= 150 &&
+        data.partNumber is string && data.partNumber.size() >= 1 && data.partNumber.size() <= 300 &&
+        data.rak is string && data.rak.size() >= 1 && data.rak.size() <= 100 &&
+        data.typeCode is string && data.typeCode.size() <= 10 && data.typeCode in ['CNU', 'SPT', 'PS'] &&
+        data.txType is string && data.txType.size() <= 15 && data.txType in ['IN', 'OUT', 'ADJ_PLUS', 'ADJ_MINUS'] &&
+        data.qty is int && data.qty >= 1 && data.qty <= 100000 &&
+        data.prevAkhirQty is int && data.prevAkhirQty >= 0 && data.prevAkhirQty <= 1000000 &&
+        data.newAkhirQty is int && data.newAkhirQty >= 0 && data.newAkhirQty <= 1000000 &&
+        data.picName is string && data.picName.size() >= 1 && data.picName.size() <= 100 &&
+        data.unitRef is string && data.unitRef.size() <= 100 &&
+        data.notes is string && data.notes.size() <= 300 &&
+        data.dateStr is string && data.dateStr.size() >= 1 && data.dateStr.size() <= 40 &&
+        data.source is string && data.source.size() <= 20 && data.source in ['QR_SCANNER', 'MANUAL_ADMIN'] &&
+        data.orgId is string && data.orgId.size() <= 32 && data.orgId == 'gudang_utama' &&
+        data.operatorUid is string && data.operatorUid.size() >= 1 && data.operatorUid.size() <= 128 &&
+        data.operatorUid == request.auth.uid &&
+        data.createdAt is timestamp;
+    }
+
+    // Validation Blueprint: AdminRecord
+    function isValidAdminRecord(data) {
+      return data.keys().hasAll(['uid', 'createdAt']) &&
+        data.keys().hasOnly(['uid', 'createdAt']) &&
+        isValidId(data.uid) &&
+        data.createdAt is timestamp;
+    }
+
+    // Collection: /inventory_items/{itemId}
+    match /inventory_items/{itemId} {
+      allow get: if isSignedIn() && isValidId(itemId) && existing().orgId == 'gudang_utama';
+      allow list: if isSignedIn() && existing().orgId == 'gudang_utama';
+      allow create: if isVerifiedUser() &&
+        isValidId(itemId) &&
+        isValidInventoryItem(incoming()) &&
+        incoming().id == itemId &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time;
+      allow update: if isVerifiedUser() &&
+        isValidId(itemId) &&
+        isValidInventoryItem(incoming()) &&
+        incoming().id == existing().id &&
+        incoming().codeItem == existing().codeItem &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time && (
+          isAdmin() ||
+          incoming().diff(existing()).affectedKeys().hasOnly([
+            'inQty', 'outQty', 'adjPlusQty', 'adjMinusQty', 'akhirQty',
+            'tanggalUpdate', 'tanggalMasuk', 'tanggalKeluar', 'remark',
+            'movementStatus', 'status1th', 'totalValue', 'updatedByUid', 'updatedAt'
+          ]) ||
+          incoming().diff(existing()).affectedKeys().hasOnly([
+            'no', 'rak', 'typeCode', 'modelUnit', 'partNumber', 'partName',
+            'codeUnit', 'tanggalUpdate', 'tanggalMasuk', 'tanggalKeluar',
+            'supplier', 'brand', 'awalQty', 'unit', 'inQty', 'adjPlusQty',
+            'outQty', 'adjMinusQty', 'akhirQty', 'minQty', 'maxQty',
+            'remark', 'movementStatus', 'price', 'totalValue', 'priceNote',
+            'status1th', 'updatedByUid', 'updatedAt'
+          ])
+        );
+      allow delete: if isAdmin() && isValidId(itemId);
+    }
+
+    // Collection: /transactions/{txId}
+    match /transactions/{txId} {
+      allow get: if isSignedIn() && isValidId(txId) && existing().orgId == 'gudang_utama';
+      allow list: if isSignedIn() && existing().orgId == 'gudang_utama';
+      allow create: if isVerifiedUser() &&
+        isValidId(txId) &&
+        isValidTransaction(incoming()) &&
+        incoming().id == txId &&
+        incoming().createdAt == request.time &&
+        exists(/databases/$(database)/documents/inventory_items/$(incoming().codeItem));
+      allow update: if isVerifiedUser() &&
+        isValidId(txId) &&
+        isValidTransaction(incoming()) &&
+        incoming().id == existing().id &&
+        incoming().codeItem == existing().codeItem;
+      allow delete: if isAdmin() && isValidId(txId);
+    }
+
+    // Collection: /admins/{adminUid}
+    match /admins/{adminUid} {
+      allow get: if isSignedIn() && isValidId(adminUid) && (request.auth.uid == adminUid || isAdmin());
+      allow list: if isAdmin() && existing().uid == request.auth.uid;
+      allow create: if isAdmin() &&
+        isValidId(adminUid) &&
+        isValidAdminRecord(incoming()) &&
+        incoming().uid == adminUid &&
+        incoming().createdAt == request.time;
+      allow update: if false;
+      allow delete: if isAdmin() && isValidId(adminUid);
+    }
+  }
+}

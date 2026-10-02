@@ -1,0 +1,6 @@
+{
+  "name": "GudangPro WMS - Inventaris & Scanner QR Real-Time",
+  "description": "Aplikasi manajemen pengeluaran dan pemasukan harian gudang dengan pemindai QR Code, cetak label QR rak, dan sinkronisasi data real-time ke dashboard admin berbasis web.",
+  "requestFramePermissions": ["camera"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
