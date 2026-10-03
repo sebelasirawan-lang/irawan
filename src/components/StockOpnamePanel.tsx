@@ -1,5 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import * as XLSX from 'xlsx';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 import {
   ClipboardCheck,
   Search,
@@ -10,6 +12,9 @@ import {
   ArrowDownLeft,
   Printer,
   FileSpreadsheet,
+  Download,
+  Eye,
+  FileText,
   RotateCcw,
   Save,
   Filter,
@@ -82,6 +87,8 @@ export const StockOpnamePanel: React.FC<StockOpnamePanelProps> = ({
   const [isResetOpnameModalOpen, setIsResetOpnameModalOpen] = useState<boolean>(false);
   const [opnamePageSize, setOpnamePageSize] = useState<number>(100);
   const [opnamePage, setOpnamePage] = useState<number>(1);
+  const [isPreviewBeritaAcaraOpen, setIsPreviewBeritaAcaraOpen] = useState<boolean>(false);
+  const [isGeneratingPdf, setIsGeneratingPdf] = useState<boolean>(false);
 
   // Per-item Opname Count State (persisted in localStorage)
   const [opnameMap, setOpnameMap] = useState<Record<string, OpnameEntry>>(() => {
@@ -246,21 +253,359 @@ export const StockOpnamePanel: React.FC<StockOpnamePanelProps> = ({
 
     const totalSku = items.length;
     const progressPct = totalSku > 0 ? Math.round((countedCount / totalSku) * 100) : 0;
+    const progressPctPrecise =
+      totalSku > 0 ? ((countedCount / totalSku) * 100).toFixed(1) : '0';
+    const uncountedCount = totalSku - countedCount;
+    const uncountedPct =
+      totalSku > 0 ? ((uncountedCount / totalSku) * 100).toFixed(1) : '0';
+    const matchedPct =
+      totalSku > 0 ? ((matchedCount / totalSku) * 100).toFixed(1) : '0';
+    const discrepancyCount = surplusCount + shortageCount;
+    const discrepancyPct =
+      totalSku > 0 ? ((discrepancyCount / totalSku) * 100).toFixed(1) : '0';
 
     return {
       totalSku,
       countedCount,
-      uncountedCount: totalSku - countedCount,
+      uncountedCount,
+      uncountedPct,
       matchedCount,
+      matchedPct,
       surplusCount,
       shortageCount,
-      discrepancyCount: surplusCount + shortageCount,
+      discrepancyCount,
+      discrepancyPct,
       surplusPcs,
       shortagePcs,
       netVarianceValue,
       progressPct,
+      progressPctPrecise,
     };
   }, [items, opnameMap]);
+
+  // Only items that have already been physically counted in this Opname session (sorted by Rak & Code Item)
+  const countedOpnameItems = useMemo(() => {
+    return items
+      .filter((item) => {
+        const entry = opnameMap[item.codeItem];
+        return (
+          entry !== undefined &&
+          entry.countedQty !== null &&
+          entry.countedQty !== undefined
+        );
+      })
+      .sort((a, b) => {
+        if (a.rak !== b.rak) return a.rak.localeCompare(b.rak);
+        return a.codeItem.localeCompare(b.codeItem);
+      });
+  }, [items, opnameMap]);
+
+  const [printWarning, setPrintWarning] = useState<string | null>(null);
+
+  const handlePrintBeritaAcara = () => {
+    if (countedOpnameItems.length === 0) {
+      setPrintWarning(
+        'Belum ada item yang dihitung fisik pada sesi Stock Opname ini (0 SKU / 0%). Harap input atau scan fisik barang terlebih dahulu sebelum mencetak Berita Acara.'
+      );
+      setTimeout(() => setPrintWarning(null), 6000);
+      return;
+    }
+    const prevTitle = document.title;
+    document.title = `Berita_Acara_Stock_Opname_${formatDateDdMmmmYy(opnameDate)}_${stats.progressPct}pct`;
+    window.print();
+    setTimeout(() => {
+      document.title = prevTitle;
+    }, 1000);
+  };
+
+  // Unduh Dokumen Berita Acara Resmi langsung ke PDF (A4 Portrait)
+  const handleDownloadBeritaAcaraPdf = () => {
+    if (countedOpnameItems.length === 0) {
+      setPrintWarning(
+        'Belum ada item yang dihitung fisik pada sesi Stock Opname ini (0 SKU / 0%). Harap input atau scan fisik barang terlebih dahulu sebelum mengunduh Berita Acara PDF.'
+      );
+      setTimeout(() => setPrintWarning(null), 6000);
+      return;
+    }
+
+    try {
+      setIsGeneratingPdf(true);
+      const doc = new jsPDF({
+        orientation: 'portrait',
+        unit: 'mm',
+        format: 'a4',
+      });
+
+      const pageWidth = doc.internal.pageSize.getWidth(); // 210mm
+      const margin = 8;
+      let currentY = 10;
+
+      // 1. KOP SURAT
+      doc.setFillColor(15, 23, 42); // slate-900
+      doc.rect(margin, currentY, 26, 6, 'F');
+      doc.setFontSize(7.5);
+      doc.setTextColor(251, 191, 36); // amber-400
+      doc.setFont('helvetica', 'bold');
+      doc.text('PT. MEGA MULTI ENERGI', margin + 1.5, currentY + 4.2);
+
+      doc.setFontSize(7);
+      doc.setTextColor(100, 116, 139);
+      doc.setFont('helvetica', 'normal');
+      doc.text(
+        `• BERITA ACARA RESMI OPNAME • Tanggal: ${formatDateDdMmmmYy(opnameDate)} • Author: Irawan`,
+        margin + 28,
+        currentY + 4.2
+      );
+
+      currentY += 8;
+
+      // Judul Dokumen
+      doc.setFontSize(12);
+      doc.setTextColor(15, 23, 42);
+      doc.setFont('helvetica', 'bold');
+      doc.text('BERITA ACARA & LEMBAR HASIL STOCK OPNAME HARIAN', margin, currentY);
+
+      currentY += 4.5;
+      doc.setFontSize(7.5);
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(71, 85, 105);
+      doc.text(
+        `Petugas PIC Logistik: ${picLogistik} | Saksi/Pemeriksa: ${auditorName} | Kepala Gudang: ${headWarehouse}`,
+        margin,
+        currentY
+      );
+
+      currentY += 5;
+
+      // Banner Persentase & Status Hanya Yang Sudah Dihitung
+      doc.setFillColor(254, 243, 199); // amber-100
+      doc.setDrawColor(245, 158, 11); // amber-500
+      doc.roundedRect(margin, currentY, pageWidth - margin * 2, 7.5, 1.5, 1.5, 'FD');
+
+      doc.setFontSize(7.8);
+      doc.setTextColor(120, 53, 15); // amber-950
+      doc.setFont('helvetica', 'bold');
+      doc.text(
+        `HANYA ITEM TERHITUNG FISIK: ${stats.countedCount} DARI TOTAL ${stats.totalSku} SKU (${stats.progressPct}% | ${stats.progressPctPrecise}%)`,
+        margin + 3,
+        currentY + 5
+      );
+
+      const summaryText = `Cocok: ${stats.matchedCount} SKU (${stats.matchedPct}%) | Selisih: ${stats.discrepancyCount} SKU (${stats.discrepancyPct}%) | Nilai Selisih: ${stats.netVarianceValue >= 0 ? '+' : ''}${formatRupiah(stats.netVarianceValue)}`;
+      doc.setFontSize(7);
+      doc.setFont('helvetica', 'normal');
+      doc.text(summaryText, pageWidth - margin - 3, currentY + 5, { align: 'right' });
+
+      currentY += 10.5;
+
+      // Ringkasan Eksekutif 4 Kolom
+      const boxW = (pageWidth - margin * 2 - 6) / 4;
+      const boxH = 11;
+
+      // Box 1: Total Master SKU
+      doc.setFillColor(248, 250, 252);
+      doc.setDrawColor(203, 213, 225);
+      doc.roundedRect(margin, currentY, boxW, boxH, 1, 1, 'FD');
+      doc.setFontSize(6);
+      doc.setTextColor(100, 116, 139);
+      doc.text('TOTAL MASTER SKU', margin + 2, currentY + 3.2);
+      doc.setFontSize(9);
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(15, 23, 42);
+      doc.text(`${stats.totalSku} SKU`, margin + 2, currentY + 7.2);
+      doc.setFontSize(5.5);
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(148, 163, 184);
+      doc.text('Kapasitas Master (100%)', margin + 2, currentY + 10);
+
+      // Box 2: Selesai Dihitung Fisik
+      doc.setFillColor(236, 253, 245);
+      doc.setDrawColor(16, 185, 129);
+      doc.roundedRect(margin + boxW + 2, currentY, boxW, boxH, 1, 1, 'FD');
+      doc.setFontSize(6);
+      doc.setTextColor(4, 120, 87);
+      doc.text('SELESAI DIHITUNG FISIK', margin + boxW + 4, currentY + 3.2);
+      doc.setFontSize(9);
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(6, 95, 70);
+      doc.text(`${stats.countedCount} SKU`, margin + boxW + 4, currentY + 7.2);
+      doc.setFontSize(5.5);
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(4, 120, 87);
+      doc.text(`${stats.progressPct}% (${stats.progressPctPrecise}%) Terverifikasi`, margin + boxW + 4, currentY + 10);
+
+      // Box 3: Belum Diperiksa
+      doc.setFillColor(248, 250, 252);
+      doc.setDrawColor(203, 213, 225);
+      doc.roundedRect(margin + (boxW + 2) * 2, currentY, boxW, boxH, 1, 1, 'FD');
+      doc.setFontSize(6);
+      doc.setTextColor(100, 116, 139);
+      doc.text('BELUM DIPERIKSA', margin + (boxW + 2) * 2 + 2, currentY + 3.2);
+      doc.setFontSize(9);
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(71, 85, 105);
+      doc.text(`${stats.uncountedCount} SKU`, margin + (boxW + 2) * 2 + 2, currentY + 7.2);
+      doc.setFontSize(5.5);
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(148, 163, 184);
+      doc.text(`${stats.uncountedPct}% Sisa Belum Hitung`, margin + (boxW + 2) * 2 + 2, currentY + 10);
+
+      // Box 4: Estimasi Nilai Selisih
+      doc.setFillColor(254, 243, 199);
+      doc.setDrawColor(245, 158, 11);
+      doc.roundedRect(margin + (boxW + 2) * 3, currentY, boxW, boxH, 1, 1, 'FD');
+      doc.setFontSize(6);
+      doc.setTextColor(180, 83, 9);
+      doc.text('ESTIMASI NILAI SELISIH', margin + (boxW + 2) * 3 + 2, currentY + 3.2);
+      doc.setFontSize(8);
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(15, 23, 42);
+      doc.text(formatRupiah(stats.netVarianceValue), margin + (boxW + 2) * 3 + 2, currentY + 7.2);
+      doc.setFontSize(5.5);
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(180, 83, 9);
+      doc.text(`${stats.discrepancyCount} SKU Memiliki Selisih`, margin + (boxW + 2) * 3 + 2, currentY + 10);
+
+      currentY += boxH + 4;
+
+      // 2. TABEL BERITA ACARA HANYA YANG SUDAH DIHITUNG
+      const tableHeaders = [
+        ['No', 'Code & Rak', 'Nama Part & Part Number', 'Code Unit', 'Sistem', 'Fisik', 'Selisih', 'Nilai Selisih', 'Catatan Temuan']
+      ];
+
+      const tableBody = countedOpnameItems.map((item, idx) => {
+        const entry = opnameMap[item.codeItem];
+        const physical = entry.countedQty as number;
+        const diff = physical - item.akhirQty;
+        const diffValue = diff * item.price;
+        return [
+          String(idx + 1),
+          `${item.codeItem}\nRak:${item.rak}`,
+          `${item.partName}\nPN:${item.partNumber} (${item.typeCode})`,
+          item.codeUnit || item.modelUnit || '-',
+          `${item.akhirQty} ${item.unit}`,
+          `${physical} ${item.unit}`,
+          diff === 0 ? 'COCOK (0)' : (diff > 0 ? `+${diff} (+ADJ)` : `${diff} (-ADJ)`),
+          diff === 0 ? 'Rp0' : (diff > 0 ? `+${formatRupiah(diffValue)}` : formatRupiah(diffValue)),
+          entry?.notes || '-',
+        ];
+      });
+
+      const totalSistemPcs = countedOpnameItems.reduce((acc, it) => acc + it.akhirQty, 0);
+      const totalFisikPcs = countedOpnameItems.reduce(
+        (acc, it) => acc + (opnameMap[it.codeItem]?.countedQty || 0),
+        0
+      );
+      const netVariancePcs = stats.surplusPcs - stats.shortagePcs;
+
+      const tableFoot = [
+        [
+          `TOTAL FISIK TERHITUNG (${countedOpnameItems.length} SKU • ${stats.progressPct}% DARI TOTAL ${stats.totalSku} SKU)`,
+          '',
+          '',
+          '',
+          `${totalSistemPcs}`,
+          `${totalFisikPcs}`,
+          `${netVariancePcs >= 0 ? '+' : ''}${netVariancePcs} Pcs`,
+          formatRupiah(stats.netVarianceValue),
+          '',
+        ]
+      ];
+
+      autoTable(doc, {
+        startY: currentY,
+        head: tableHeaders,
+        body: tableBody,
+        foot: tableFoot,
+        theme: 'grid',
+        margin: { left: margin, right: margin },
+        headStyles: {
+          fillColor: [15, 23, 42],
+          textColor: [255, 255, 255],
+          fontSize: 6.5,
+          fontStyle: 'bold',
+          halign: 'center',
+        },
+        styles: {
+          fontSize: 6,
+          cellPadding: 1.2,
+          overflow: 'linebreak',
+        },
+        columnStyles: {
+          0: { cellWidth: 7, halign: 'center' },
+          1: { cellWidth: 20 },
+          2: { cellWidth: 'auto' },
+          3: { cellWidth: 18 },
+          4: { cellWidth: 15, halign: 'right' },
+          5: { cellWidth: 15, halign: 'right' },
+          6: { cellWidth: 18, halign: 'center' },
+          7: { cellWidth: 22, halign: 'right' },
+          8: { cellWidth: 24 },
+        },
+        footStyles: {
+          fillColor: [15, 23, 42],
+          textColor: [251, 191, 36],
+          fontSize: 6.5,
+          fontStyle: 'bold',
+        },
+        didDrawPage: () => {
+          doc.setFontSize(6);
+          doc.setTextColor(148, 163, 184);
+          doc.text(
+            `PT. MEGA MULTI ENERGI • Berita Acara Stock Opname (Hanya Item Terhitung: ${stats.countedCount}/${stats.totalSku} SKU - ${stats.progressPct}%) • Hal ${doc.getNumberOfPages()}`,
+            margin,
+            doc.internal.pageSize.getHeight() - 4
+          );
+        },
+      });
+
+      // @ts-expect-error jspdf-autotable extends jsPDF instance with lastAutoTable
+      currentY = (doc.lastAutoTable?.finalY || currentY) + 7;
+
+      // 3. TANDA TANGAN
+      if (currentY > doc.internal.pageSize.getHeight() - 32) {
+        doc.addPage();
+        currentY = 15;
+      }
+
+      doc.setDrawColor(203, 213, 225);
+      doc.line(margin, currentY, pageWidth - margin, currentY);
+      currentY += 4;
+
+      const colWidth = (pageWidth - margin * 2) / 3;
+
+      doc.setFontSize(7);
+      doc.setTextColor(51, 65, 85);
+      doc.setFont('helvetica', 'bold');
+      doc.text('Dilaksanakan Oleh (PIC Logistik),', margin + colWidth * 0.5, currentY, { align: 'center' });
+      doc.text('Diperiksa / Saksi Opname,', margin + colWidth * 1.5, currentY, { align: 'center' });
+      doc.text('Disetujui Oleh (Kepala Gudang),', margin + colWidth * 2.5, currentY, { align: 'center' });
+
+      currentY += 13;
+
+      doc.setFontSize(7.5);
+      doc.setTextColor(15, 23, 42);
+      doc.setFont('helvetica', 'bold');
+      doc.text(picLogistik, margin + colWidth * 0.5, currentY, { align: 'center' });
+      doc.text(auditorName, margin + colWidth * 1.5, currentY, { align: 'center' });
+      doc.text(headWarehouse, margin + colWidth * 2.5, currentY, { align: 'center' });
+
+      currentY += 3.5;
+      doc.setFontSize(6);
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(100, 116, 139);
+      doc.text('Petugas Pelaksana Fisik', margin + colWidth * 0.5, currentY, { align: 'center' });
+      doc.text('Saksi Pemeriksaan Fisik', margin + colWidth * 1.5, currentY, { align: 'center' });
+      doc.text('Kepala Gudang / Pimpinan', margin + colWidth * 2.5, currentY, { align: 'center' });
+
+      // Simpan PDF
+      doc.save(
+        `Berita_Acara_Stock_Opname_${formatDateDdMmmmYy(opnameDate)}_${stats.progressPct}pct.pdf`
+      );
+    } finally {
+      setIsGeneratingPdf(false);
+    }
+  };
 
   // Bulk Action: Mark all currently filtered items as matching system stock
   const handleMarkFilteredAsMatch = () => {
@@ -394,7 +739,52 @@ export const StockOpnamePanel: React.FC<StockOpnamePanelProps> = ({
       'Catatan Opname',
     ];
 
-    const rows = filteredItems.map((item, idx) => {
+    // Sheet 1: Hanya yang sudah dihitung (Berita Acara Resmi)
+    const countedRows = countedOpnameItems.map((item, idx) => {
+      const entry = opnameMap[item.codeItem];
+      const physical = entry.countedQty as number;
+      const diff = physical - item.akhirQty;
+      const statusLabel =
+        diff === 0
+          ? 'COCOK / SESUAI'
+          : diff > 0
+          ? 'SELISIH LEBIH (+)'
+          : 'SELISIH KURANG (-)';
+
+      return [
+        idx + 1,
+        item.codeItem,
+        item.rak,
+        item.typeCode,
+        item.partName,
+        item.partNumber,
+        item.codeUnit || item.modelUnit,
+        item.akhirQty,
+        physical,
+        diff,
+        statusLabel,
+        item.unit,
+        item.price,
+        diff * item.price,
+        picLogistik,
+        auditorName,
+        entry?.notes || '',
+      ];
+    });
+
+    const wsCounted = XLSX.utils.aoa_to_sheet([
+      ['PT. MEGA MULTI ENERGI'],
+      [`BERITA ACARA STOCK OPNAME HARIAN - ${formatDateDdMmmmYy(opnameDate)}`],
+      [`HASIL PEMERIKSAAN FISIK: ${stats.countedCount} DARI ${stats.totalSku} SKU (${stats.progressPct}%)`],
+      [`PIC Logistik: ${picLogistik} | Pemeriksa: ${auditorName} | Kepala Gudang: ${headWarehouse} | Author: Irawan`],
+      [],
+      headers,
+      ...countedRows,
+    ]);
+    XLSX.utils.book_append_sheet(wb, wsCounted, 'Berita_Acara_Dihitung');
+
+    // Sheet 2: Seluruh Item untuk Lembar Kerja Audit
+    const allRows = filteredItems.map((item, idx) => {
       const entry = opnameMap[item.codeItem];
       const hasCount =
         entry && entry.countedQty !== null && entry.countedQty !== undefined;
@@ -429,20 +819,51 @@ export const StockOpnamePanel: React.FC<StockOpnamePanelProps> = ({
       ];
     });
 
-    const ws = XLSX.utils.aoa_to_sheet([
+    const wsAll = XLSX.utils.aoa_to_sheet([
       ['PT. MEGA MULTI ENERGI'],
-      [`BERITA ACARA & LEMBAR KERJA STOCK OPNAME HARIAN - ${formatDateDdMmmmYy(opnameDate)}`],
+      [`LEMBAR KERJA LENGKAP STOCK OPNAME HARIAN - ${formatDateDdMmmmYy(opnameDate)}`],
+      [`Progress: ${stats.countedCount} / ${stats.totalSku} SKU (${stats.progressPct}%) | Cocok: ${stats.matchedCount} | Selisih: ${stats.discrepancyCount} SKU`],
       [`PIC Logistik: ${picLogistik} | Pemeriksa: ${auditorName} | Author: Irawan`],
       [],
       headers,
-      ...rows,
+      ...allRows,
     ]);
-    XLSX.utils.book_append_sheet(wb, ws, 'Stock_Opname_Harian');
-    XLSX.writeFile(wb, `Berita_Acara_Stock_Opname_${formatDateDdMmmmYy(opnameDate)}.xlsx`);
+    XLSX.utils.book_append_sheet(wb, wsAll, 'Semua_Item_Opname');
+
+    XLSX.writeFile(
+      wb,
+      `Berita_Acara_Stock_Opname_${formatDateDdMmmmYy(opnameDate)}_${stats.progressPct}pct.xlsx`
+    );
   };
 
   return (
     <div className="space-y-6">
+      <style>{`
+        @media print {
+          @page {
+            size: A4 portrait;
+            margin: 8mm;
+          }
+        }
+      `}</style>
+
+      {/* Warning Alert if User Tries to Print with 0 Counted Items */}
+      {printWarning && (
+        <div className="no-print p-3.5 rounded-xl bg-amber-500/15 border border-amber-500/40 text-amber-200 text-xs flex items-center justify-between shadow-lg">
+          <div className="flex items-center gap-2">
+            <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
+            <span>{printWarning}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setPrintWarning(null)}
+            className="text-slate-400 hover:text-slate-100 cursor-pointer text-sm px-1.5"
+          >
+            ✕
+          </button>
+        </div>
+      )}
+
       {/* ===================================================================
           1. TOP KPI & PROGRESS SUMMARY (HIDDEN ON PRINT)
          =================================================================== */}
@@ -618,19 +1039,46 @@ export const StockOpnamePanel: React.FC<StockOpnamePanelProps> = ({
             <button
               type="button"
               onClick={handleExportOpnameExcel}
-              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-emerald-300 text-xs font-bold transition cursor-pointer"
+              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-emerald-300 text-xs font-bold transition cursor-pointer"
+              title="Download Hasil Opname Lengkap ke format Excel (.xlsx)"
             >
               <FileSpreadsheet className="w-4 h-4 text-emerald-400" />
-              Export Excel Opname
+              Export Excel
             </button>
 
             <button
               type="button"
-              onClick={() => window.print()}
-              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-extrabold transition cursor-pointer shadow-md"
+              disabled={isGeneratingPdf}
+              onClick={handleDownloadBeritaAcaraPdf}
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-rose-500/15 hover:bg-rose-500/25 border border-rose-500/40 text-rose-300 text-xs font-bold transition cursor-pointer disabled:opacity-50"
+              title="Unduh Berita Acara resmi (Hanya yang sudah dihitung) ke file PDF"
+            >
+              <Download className="w-4 h-4 text-rose-400" />
+              <span>{isGeneratingPdf ? 'Membuat PDF...' : `Unduh PDF (${stats.countedCount} SKU • ${stats.progressPct}%)`}</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={handlePrintBeritaAcara}
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-extrabold transition cursor-pointer shadow-md"
+              title="Cetak Berita Acara hanya untuk item yang sudah dihitung (A4 Portrait)"
             >
               <Printer className="w-4 h-4" />
-              Cetak Berita Acara Opname
+              <span>Cetak Berita Acara ({stats.countedCount} SKU • ${stats.progressPct}%)</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setIsPreviewBeritaAcaraOpen(!isPreviewBeritaAcaraOpen)}
+              className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border text-xs font-semibold transition cursor-pointer ${
+                isPreviewBeritaAcaraOpen
+                  ? 'bg-cyan-500/20 border-cyan-400 text-cyan-200'
+                  : 'bg-slate-800 hover:bg-slate-700 border-slate-700 text-cyan-300'
+              }`}
+              title="Lihat Pratinjau Dokumen Berita Acara Langsung di Layar"
+            >
+              <Eye className="w-4 h-4 text-cyan-400" />
+              <span>{isPreviewBeritaAcaraOpen ? 'Tutup Pratinjau' : 'Pratinjau Berita Acara'}</span>
             </button>
           </div>
         </div>
@@ -1076,115 +1524,252 @@ export const StockOpnamePanel: React.FC<StockOpnamePanelProps> = ({
       </div>
 
       {/* ===================================================================
-          4. PRINTABLE OFFICIAL BERITA ACARA STOCK OPNAME HARIAN
+          4. OFFICIAL BERITA ACARA STOCK OPNAME HARIAN
+          HANYA MENAMPILKAN BARANG YANG SUDAH DIHITUNG & PERSENTASE DARI TOTAL SKU
          =================================================================== */}
-      <div className="hidden print:block bg-white text-slate-900 p-0">
-        <div className="border-b-4 border-slate-900 pb-4 mb-5 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-11 h-11 rounded-xl bg-slate-900 text-amber-400 flex items-center justify-center font-extrabold border border-slate-900">
+      <div
+        className={`${
+          isPreviewBeritaAcaraOpen ? 'block my-6' : 'hidden'
+        } print:block print-only bg-white text-slate-900 rounded-2xl shadow-2xl border border-slate-200 p-5 sm:p-8 print:shadow-none print:border-none print:p-0 print:rounded-none max-w-[210mm] print:max-w-none print:w-full mx-auto`}
+      >
+        {/* Banner Navigasi Pratinjau (Hanya Tampil di Layar saat Mode Pratinjau Aktif) */}
+        {isPreviewBeritaAcaraOpen && (
+          <div className="no-print -mt-2 -mx-2 mb-6 p-4 rounded-xl bg-slate-900 text-slate-100 flex flex-wrap items-center justify-between gap-3 shadow-md border border-slate-800">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-lg bg-amber-500/20 border border-amber-500/40 text-amber-400 flex items-center justify-center font-bold">
+                <FileText className="w-4 h-4" />
+              </div>
+              <div>
+                <p className="text-xs font-bold text-slate-100">
+                  Pratinjau Lembar Berita Acara Stock Opname (A4 Portrait)
+                </p>
+                <p className="text-[11px] text-amber-300 font-mono">
+                  Hanya Item Terhitung Fisik: {stats.countedCount} dari {stats.totalSku} SKU ({stats.progressPct}% | {stats.progressPctPrecise}%)
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                disabled={isGeneratingPdf}
+                onClick={handleDownloadBeritaAcaraPdf}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-rose-500 hover:bg-rose-600 text-white font-bold text-xs transition cursor-pointer"
+              >
+                <Download className="w-3.5 h-3.5" />
+                <span>{isGeneratingPdf ? 'Membuat PDF...' : 'Unduh PDF'}</span>
+              </button>
+              <button
+                type="button"
+                onClick={handlePrintBeritaAcara}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 font-extrabold text-xs transition cursor-pointer"
+              >
+                <Printer className="w-3.5 h-3.5" />
+                <span>Cetak / Simpan PDF</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsPreviewBeritaAcaraOpen(false)}
+                className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs transition cursor-pointer"
+              >
+                ✕ Tutup
+              </button>
+            </div>
+          </div>
+        )}
+
+        <div className="border-b-4 border-slate-900 pb-4 mb-4 flex flex-col sm:flex-row sm:items-start justify-between gap-3">
+          <div className="flex items-start gap-3">
+            <div className="w-11 h-11 rounded-xl bg-slate-900 text-amber-400 flex items-center justify-center font-extrabold border border-slate-900 shrink-0">
               <Boxes className="w-6 h-6" />
             </div>
             <div>
-              <div className="text-[10px] font-mono font-bold uppercase tracking-widest text-slate-600">
-                PT. MEGA MULTI ENERGI • AUTHOR: IRAWAN
+              <div className="flex items-center gap-2">
+                <span className="text-[9px] font-mono font-bold uppercase tracking-widest px-2 py-0.5 rounded bg-slate-900 text-amber-400">
+                  PT. MEGA MULTI ENERGI
+                </span>
+                <span className="text-[10px] font-mono text-slate-600 font-semibold">
+                  • BERITA ACARA RESMI OPNAME
+                </span>
+                <span className="text-[10px] font-mono text-slate-500">
+                  • Author: Irawan
+                </span>
               </div>
-              <h1 className="text-xl font-extrabold text-slate-900">
-                BERITA ACARA STOCK OPNAME HARIAN GUDANG
+              <h1 className="text-xl font-extrabold text-slate-900 mt-1">
+                BERITA ACARA & LEMBAR HASIL STOCK OPNAME HARIAN
               </h1>
               <p className="text-xs text-slate-600">
                 Tanggal Opname: <strong>{formatDateDdMmmmYy(opnameDate)}</strong> • PIC Logistik:{' '}
-                <strong>{picLogistik}</strong> • Pemeriksa: <strong>{auditorName}</strong>
+                <strong>{picLogistik}</strong> • Saksi / Pemeriksa: <strong>{auditorName}</strong> • Kepala Gudang: <strong>{headWarehouse}</strong>
               </p>
             </div>
           </div>
-          <div className="text-right font-mono text-xs">
-            <div className="font-bold">
-              Diperiksa: {stats.countedCount} / {stats.totalSku} SKU
+
+          <div className="text-right font-mono space-y-1 shrink-0">
+            <div className="inline-block px-3 py-1 rounded-lg bg-amber-100 border border-amber-300 text-amber-950 font-extrabold text-xs">
+              REALISASI: {stats.countedCount} / {stats.totalSku} SKU ({stats.progressPct}% | {stats.progressPctPrecise}%)
             </div>
-            <div>
-              Cocok: {stats.matchedCount} | Selisih: {stats.discrepancyCount} SKU
+            <div className="text-xs font-bold text-slate-800">
+              Persentase Terhitung: <span className="text-amber-700">{stats.progressPct}% ({stats.progressPctPrecise}%)</span> dari Total Master SKU
+            </div>
+            <div className="text-[11px] text-slate-600">
+              Cocok: {stats.matchedCount} SKU ({stats.matchedPct}%) • Selisih: {stats.discrepancyCount} SKU ({stats.discrepancyPct}%)
             </div>
           </div>
         </div>
 
-        <table className="w-full text-left border-collapse text-[11px] border border-slate-300">
-          <thead>
-            <tr className="bg-slate-900 text-white text-[10px] uppercase">
-              <th className="py-2 px-2 border-r border-slate-700 text-center">No</th>
-              <th className="py-2 px-2 border-r border-slate-700">Code Item & Rak</th>
-              <th className="py-2 px-2 border-r border-slate-700">Part Name & PN</th>
-              <th className="py-2 px-2 border-r border-slate-700">Code Unit</th>
-              <th className="py-2 px-2 border-r border-slate-700 text-right">Stok Sistem</th>
-              <th className="py-2 px-2 border-r border-slate-700 text-right">Stok Fisik</th>
-              <th className="py-2 px-2 border-r border-slate-700 text-center">Selisih</th>
-              <th className="py-2 px-2">Catatan Opname</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-200">
-            {paginatedOpnameItems.map((item, idx) => {
-              const entry = opnameMap[item.codeItem];
-              const hasCount =
-                entry !== undefined &&
-                entry.countedQty !== null &&
-                entry.countedQty !== undefined;
-              const diff = hasCount
-                ? (entry.countedQty as number) - item.akhirQty
-                : null;
-              return (
-                <tr key={item.id} className="even:bg-slate-50">
-                  <td className="py-1.5 px-2 text-center font-mono border-r border-slate-200">
-                    {idx + 1}
-                  </td>
-                  <td className="py-1.5 px-2 font-mono border-r border-slate-200">
-                    <strong>{item.codeItem}</strong> ({item.rak})
-                  </td>
-                  <td className="py-1.5 px-2 border-r border-slate-200">
-                    <div className="font-bold">{item.partName}</div>
-                    <div className="font-mono text-[10px] text-slate-600">
-                      {item.partNumber}
-                    </div>
-                  </td>
-                  <td className="py-1.5 px-2 font-mono border-r border-slate-200">
-                    {item.codeUnit || item.modelUnit}
-                  </td>
-                  <td className="py-1.5 px-2 text-right font-mono border-r border-slate-200">
-                    {item.akhirQty} {item.unit}
-                  </td>
-                  <td className="py-1.5 px-2 text-right font-mono font-bold border-r border-slate-200">
-                    {hasCount ? `${entry.countedQty} ${item.unit}` : '.......'}
-                  </td>
-                  <td className="py-1.5 px-2 text-center font-mono font-bold border-r border-slate-200">
-                    {!hasCount
-                      ? '-'
-                      : diff === 0
-                      ? 'COCOK (0)'
-                      : (diff as number) > 0
-                      ? `+${diff}`
-                      : `${diff}`}
-                  </td>
-                  <td className="py-1.5 px-2">{entry?.notes || '-'}</td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+        {/* Ringkasan Eksekutif Opname & Persentase Total SKU */}
+        <div className="grid grid-cols-4 gap-2.5 mb-4 text-xs font-mono">
+          <div className="p-2.5 rounded-lg border border-slate-300 bg-slate-50">
+            <span className="text-[9px] font-bold text-slate-500 block uppercase">Total Master SKU</span>
+            <span className="text-base font-extrabold text-slate-900">{stats.totalSku} SKU</span>
+            <span className="text-[9px] text-slate-500 block">Kapasitas Master (100%)</span>
+          </div>
+          <div className="p-2.5 rounded-lg border border-emerald-300 bg-emerald-50">
+            <span className="text-[9px] font-bold text-emerald-800 block uppercase">Selesai Dihitung Fisik</span>
+            <span className="text-base font-extrabold text-emerald-700">{stats.countedCount} SKU</span>
+            <span className="text-[9px] text-emerald-800 font-bold block">{stats.progressPct}% ({stats.progressPctPrecise}%) Terverifikasi</span>
+          </div>
+          <div className="p-2.5 rounded-lg border border-slate-300 bg-slate-50">
+            <span className="text-[9px] font-bold text-slate-500 block uppercase">Belum Diperiksa</span>
+            <span className="text-base font-extrabold text-slate-600">{stats.uncountedCount} SKU</span>
+            <span className="text-[9px] text-slate-500 block">{stats.uncountedPct}% Sisa Belum Hitung</span>
+          </div>
+          <div className="p-2.5 rounded-lg border border-amber-300 bg-amber-50">
+            <span className="text-[9px] font-bold text-amber-800 block uppercase">Estimasi Nilai Selisih</span>
+            <span className="text-base font-extrabold text-slate-900">{formatRupiah(stats.netVarianceValue)}</span>
+            <span className="text-[9px] text-amber-800 block">{stats.discrepancyCount} SKU ({stats.discrepancyPct}%) Selisih</span>
+          </div>
+        </div>
 
-        <div className="mt-8 pt-4 border-t-2 border-slate-300 grid grid-cols-3 gap-6 text-center text-xs">
+        {/* Tabel Berita Acara: HANYA MENAMPILKAN BARANG YANG SUDAH DIHITUNG */}
+        {countedOpnameItems.length === 0 ? (
+          <div className="p-8 border-2 border-dashed border-slate-300 rounded-xl text-center text-xs text-slate-600 bg-slate-50 my-6">
+            <p className="font-extrabold text-slate-900 text-sm mb-1">
+              Belum Ada Item Yang Dihitung Fisik (0 SKU / 0%)
+            </p>
+            <p>
+              Berita Acara ini dikonfigurasi untuk hanya mencetak barang yang sudah dihitung fisik.
+              Silakan input jumlah fisik barang terlebih dahulu pada tabel Stock Opname.
+            </p>
+          </div>
+        ) : (
+          <table className="w-full text-left border-collapse text-[10px] border border-slate-300">
+            <thead>
+              <tr className="bg-slate-900 text-white text-[9px] uppercase font-bold tracking-tight">
+                <th className="py-2 px-1.5 border-r border-slate-700 text-center w-8">No</th>
+                <th className="py-2 px-2 border-r border-slate-700 w-24">Code Item & Rak</th>
+                <th className="py-2 px-2 border-r border-slate-700">Part Name & Part Number</th>
+                <th className="py-2 px-2 border-r border-slate-700 w-20">Code Unit</th>
+                <th className="py-2 px-2 border-r border-slate-700 text-right w-16">Stok Sistem</th>
+                <th className="py-2 px-2 border-r border-slate-700 text-right w-16">Stok Fisik</th>
+                <th className="py-2 px-2 border-r border-slate-700 text-center w-24">Selisih Fisik</th>
+                <th className="py-2 px-2 border-r border-slate-700 text-right w-24">Nilai Selisih (Rp)</th>
+                <th className="py-2 px-2">Catatan Temuan</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-200">
+              {countedOpnameItems.map((item, idx) => {
+                const entry = opnameMap[item.codeItem];
+                const physicalQty = entry.countedQty as number;
+                const diff = physicalQty - item.akhirQty;
+                const diffValue = diff * item.price;
+                return (
+                  <tr key={item.id} className="even:bg-slate-50/80 align-top">
+                    <td className="py-1.5 px-1.5 text-center font-mono border-r border-slate-200">
+                      {idx + 1}
+                    </td>
+                    <td className="py-1.5 px-2 font-mono border-r border-slate-200">
+                      <div className="font-bold text-slate-900">{item.codeItem}</div>
+                      <div className="text-[9px] text-slate-500">Rak: {item.rak}</div>
+                    </td>
+                    <td className="py-1.5 px-2 border-r border-slate-200">
+                      <div className="font-bold text-slate-900">{item.partName}</div>
+                      <div className="font-mono text-[9px] text-slate-500">
+                        {item.partNumber} ({item.typeCode})
+                      </div>
+                    </td>
+                    <td className="py-1.5 px-2 font-mono border-r border-slate-200">
+                      {item.codeUnit || item.modelUnit}
+                    </td>
+                    <td className="py-1.5 px-2 text-right font-mono border-r border-slate-200">
+                      {item.akhirQty} {item.unit}
+                    </td>
+                    <td className="py-1.5 px-2 text-right font-mono font-extrabold border-r border-slate-200 text-slate-900">
+                      {physicalQty} {item.unit}
+                    </td>
+                    <td className="py-1.5 px-2 text-center font-mono font-bold border-r border-slate-200">
+                      {diff === 0 ? (
+                        <span className="text-emerald-700 font-extrabold">COCOK (0)</span>
+                      ) : diff > 0 ? (
+                        <span className="text-blue-700 font-extrabold">+{diff} {item.unit} (+ADJ)</span>
+                      ) : (
+                        <span className="text-rose-700 font-extrabold">{diff} {item.unit} (-ADJ)</span>
+                      )}
+                    </td>
+                    <td className="py-1.5 px-2 text-right font-mono border-r border-slate-200">
+                      {diff === 0 ? 'Rp0' : (diff > 0 ? `+${formatRupiah(diffValue)}` : formatRupiah(diffValue))}
+                    </td>
+                    <td className="py-1.5 px-2 text-slate-700">{entry?.notes || '-'}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+            <tfoot>
+              <tr className="bg-slate-900 text-white font-mono text-[10px] font-extrabold">
+                <td colSpan={4} className="py-2.5 px-2 text-right uppercase tracking-wider border-r border-slate-700">
+                  TOTAL DIHITUNG ({countedOpnameItems.length} SKU • {stats.progressPct}% DARI TOTAL {stats.totalSku} SKU)
+                </td>
+                <td className="py-2.5 px-2 text-right border-r border-slate-700">
+                  {countedOpnameItems.reduce((acc, it) => acc + it.akhirQty, 0)}
+                </td>
+                <td className="py-2.5 px-2 text-right border-r border-slate-700 text-amber-300">
+                  {countedOpnameItems.reduce(
+                    (acc, it) => acc + (opnameMap[it.codeItem]?.countedQty || 0),
+                    0
+                  )}
+                </td>
+                <td className="py-2.5 px-2 text-center border-r border-slate-700 text-amber-300">
+                  {stats.surplusPcs - stats.shortagePcs > 0
+                    ? `+${stats.surplusPcs - stats.shortagePcs}`
+                    : `${stats.surplusPcs - stats.shortagePcs}`}{' '}
+                  Pcs
+                </td>
+                <td className="py-2.5 px-2 text-right border-r border-slate-700 text-amber-300">
+                  {formatRupiah(stats.netVarianceValue)}
+                </td>
+                <td className="py-2.5 px-2"></td>
+              </tr>
+            </tfoot>
+          </table>
+        )}
+
+        {/* Tanda Tangan Berita Acara */}
+        <div className="mt-8 pt-4 border-t-2 border-slate-300 grid grid-cols-3 gap-6 text-center text-xs break-inside-avoid">
           <div>
-            <p className="font-bold uppercase text-[10px]">Dilaksanakan Oleh (PIC Logistik),</p>
+            <p className="font-bold uppercase text-[10px] text-slate-700">Dilaksanakan Oleh (PIC Logistik),</p>
             <div className="h-16" />
-            <p className="font-extrabold underline">{picLogistik}</p>
+            <p className="font-extrabold underline text-slate-900">{picLogistik}</p>
+            <p className="text-[10px] text-slate-500 mt-0.5">Petugas Pelaksana Stock Opname</p>
           </div>
           <div>
-            <p className="font-bold uppercase text-[10px]">Diperiksa / Saksi Opname,</p>
+            <p className="font-bold uppercase text-[10px] text-slate-700">Diperiksa / Saksi Opname,</p>
             <div className="h-16" />
-            <p className="font-extrabold underline">{auditorName}</p>
+            <p className="font-extrabold underline text-slate-900">{auditorName}</p>
+            <p className="text-[10px] text-slate-500 mt-0.5">Saksi Pemeriksaan Fisik</p>
           </div>
           <div>
-            <p className="font-bold uppercase text-[10px]">Disetujui Oleh (Kepala Gudang),</p>
+            <p className="font-bold uppercase text-[10px] text-slate-700">Disetujui Oleh (Kepala Gudang),</p>
             <div className="h-16" />
-            <p className="font-extrabold underline">{headWarehouse}</p>
+            <p className="font-extrabold underline text-slate-900">{headWarehouse}</p>
+            <p className="text-[10px] text-slate-500 mt-0.5">Kepala Gudang / Pimpinan</p>
           </div>
+        </div>
+
+        <div className="mt-5 pt-2 border-t border-slate-200 flex items-center justify-between text-[9px] font-mono text-slate-500">
+          <span>
+            Dokumen Berita Acara Resmi PT. Mega Multi Energi • Realisasi Hitung: {stats.countedCount} dari {stats.totalSku} Total SKU ({stats.progressPct}% | {stats.progressPctPrecise}%) • Hanya Item Terhitung
+          </span>
+          <span>Author Aplikasi: Irawan</span>
         </div>
       </div>
 
