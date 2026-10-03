@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   onAuthStateChanged,
+  signInAnonymously,
   User as FirebaseUser,
 } from 'firebase/auth';
 import {
@@ -334,13 +335,38 @@ useEffect(() => {
   }, []);
 
   // Track Firebase Auth state
-  useEffect(() => {
-    const unsub = onAuthStateChanged(auth, (currentUser) => {
-      setUser(currentUser);
+useEffect(() => {
+  const unsub = onAuthStateChanged(auth, async (currentUser) => {
+    try {
+      if (currentUser) {
+        setUser(currentUser);
+        setAuthReady(true);
+        return;
+      }
+
+      // Login otomatis tanpa perlu login manual
+      const result = await signInAnonymously(auth);
+
+      console.log(
+        'Firebase Anonymous Auth berhasil:',
+        result.user.uid
+      );
+
+      setUser(result.user);
       setAuthReady(true);
-    });
-    return () => unsub();
-  }, []);
+    } catch (error) {
+      console.error(
+        'GAGAL FIREBASE ANONYMOUS AUTH:',
+        error
+      );
+
+      setUser(null);
+      setAuthReady(true);
+    }
+  });
+
+  return () => unsub();
+}, []);
 
   // Real-time Firestore listener when user is authenticated
   useEffect(() => {
