@@ -1,8 +1,11 @@
 import React, { useMemo, useState } from 'react';
 import * as XLSX from 'xlsx';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 import {
   Printer,
   FileSpreadsheet,
+  Download,
   ArrowDownLeft,
   ArrowUpRight,
   Layers,
@@ -60,6 +63,7 @@ export const PrintReportPanel: React.FC<PrintReportPanelProps> = ({
   const [categoryFilter, setCategoryFilter] = useState<string>('ALL');
   const [recapPageSize, setRecapPageSize] = useState<number>(100);
   const [recapPage, setRecapPage] = useState<number>(1);
+  const [isGeneratingPdf, setIsGeneratingPdf] = useState<boolean>(false);
 
   // Date selector states (Defaulting to latest transaction date or current date)
   const [selectedDate, setSelectedDate] = useState<string>(() => {
@@ -341,7 +345,12 @@ export const PrintReportPanel: React.FC<PrintReportPanelProps> = ({
   };
 
   const handlePrintDocument = () => {
+    const prevTitle = document.title;
+    document.title = `Laporan_Gudang_${flowFilter}_${periodType}_${selectedDate}`;
     window.print();
+    setTimeout(() => {
+      document.title = prevTitle;
+    }, 1000);
   };
 
   const handleExportReportExcel = () => {
@@ -469,6 +478,292 @@ export const PrintReportPanel: React.FC<PrintReportPanelProps> = ({
     );
   };
 
+  // Generate and directly download authentic A4 Portrait PDF file
+  const handleDownloadReportPdf = () => {
+    setIsGeneratingPdf(true);
+    try {
+      const doc = new jsPDF({
+        orientation: 'portrait',
+        unit: 'mm',
+        format: 'a4',
+      });
+
+      const pageWidth = doc.internal.pageSize.getWidth(); // 210mm
+      const margin = 8;
+      let currentY = 10;
+
+      // 1. KOP SURAT / OFFICIAL LETTERHEAD
+      doc.setFillColor(15, 23, 42); // slate-900
+      doc.rect(margin, currentY, pageWidth - margin * 2, 17, 'F');
+
+      doc.setTextColor(245, 158, 11); // amber-400
+      doc.setFontSize(11);
+      doc.setFont('helvetica', 'bold');
+      doc.text(companyName.toUpperCase(), margin + 4, currentY + 6);
+
+      doc.setTextColor(255, 255, 255);
+      doc.setFontSize(8.5);
+      doc.setFont('helvetica', 'normal');
+      doc.text(
+        `${warehouseUnit} • ${reportTitle}`,
+        margin + 4,
+        currentY + 11
+      );
+
+      doc.setFontSize(7);
+      doc.setTextColor(148, 163, 184); // slate-400
+      doc.text(
+        `No. Dokumen: ${docNumber} | Periode: ${periodLabel} | Dicetak: ${new Date().toLocaleDateString('id-ID')}`,
+        margin + 4,
+        currentY + 15
+      );
+
+      currentY += 21;
+
+      // 2. EXECUTIVE METRIC SUMMARY BANNER
+      doc.setFillColor(248, 250, 252); // slate-50
+      doc.setDrawColor(203, 213, 225); // slate-300
+      doc.rect(margin, currentY, pageWidth - margin * 2, 11, 'FD');
+
+      doc.setFontSize(7.5);
+      doc.setTextColor(15, 23, 42);
+      doc.setFont('helvetica', 'bold');
+      doc.text(
+        `Total SKU: ${filteredRecapItems.length} Item  |  Saldo Akhir: ${reportStats.recapTotalAkhir} Pcs  |  Masuk (+IN): +${reportStats.recapTotalIn} Pcs  |  Keluar (-OUT): -${reportStats.recapTotalOut} Pcs  |  Aset: ${formatRupiah(reportStats.recapTotalAsset)}`,
+        margin + 3,
+        currentY + 7
+      );
+
+      currentY += 15;
+
+      // 3. TABEL A: RINCIAN LOG TRANSAKSI
+      if (sectionMode === 'BOTH' || sectionMode === 'TRANSACTIONS_ONLY') {
+        doc.setFontSize(8.5);
+        doc.setTextColor(15, 23, 42);
+        doc.setFont('helvetica', 'bold');
+        doc.text(
+          `A. RINCIAN LOG TRANSAKSI HARIAN (${filteredTransactions.length} Transaksi)`,
+          margin,
+          currentY
+        );
+        currentY += 3;
+
+        const txHeaders = [
+          ['No', 'Tgl', 'Arus', 'Code & Rak', 'Nama Part & PN', 'Qty', 'Mekanik Pengambil', 'Code Unit', 'PIC Logistik']
+        ];
+        const txBody = filteredTransactions.map((tx, idx) => {
+          const { officer, recipient } = splitPicAndRecipient(tx);
+          const codeUnitVal = getTransactionCodeUnit(tx);
+          const isIn = tx.txType === 'IN' || tx.txType === 'ADJ_PLUS';
+          return [
+            String(idx + 1),
+            formatDateDdMmmmYy(tx.dateStr),
+            isIn ? '+IN' : '-OUT',
+            `${tx.codeItem}\nRak:${tx.rak}`,
+            `${tx.partName}\nPN:${tx.partNumber}`,
+            `${isIn ? '+' : '-'}${tx.qty}\n(${tx.prevAkhirQty}→${tx.newAkhirQty})`,
+            recipient && recipient !== '-' ? recipient : '-',
+            codeUnitVal || '-',
+            officer && officer !== '-' ? officer : '-',
+          ];
+        });
+
+        autoTable(doc, {
+          startY: currentY,
+          head: txHeaders,
+          body: txBody,
+          theme: 'grid',
+          margin: { left: margin, right: margin },
+          headStyles: {
+            fillColor: [15, 23, 42],
+            textColor: [255, 255, 255],
+            fontSize: 6.5,
+            fontStyle: 'bold',
+            halign: 'center',
+          },
+          styles: {
+            fontSize: 6,
+            cellPadding: 1.2,
+            overflow: 'linebreak',
+          },
+          columnStyles: {
+            0: { cellWidth: 7, halign: 'center' },
+            1: { cellWidth: 16 },
+            2: { cellWidth: 10, halign: 'center' },
+            3: { cellWidth: 22 },
+            4: { cellWidth: 'auto' },
+            5: { cellWidth: 16, halign: 'right' },
+            6: { cellWidth: 22 },
+            7: { cellWidth: 20 },
+            8: { cellWidth: 20 },
+          },
+          didDrawPage: () => {
+            doc.setFontSize(6);
+            doc.setTextColor(148, 163, 184);
+            doc.text(
+              `${companyName} • Laporan Gudang Resmi • Halaman ${doc.getNumberOfPages()}`,
+              margin,
+              doc.internal.pageSize.getHeight() - 4
+            );
+          },
+        });
+
+        // @ts-expect-error jspdf-autotable extends jsPDF instance with lastAutoTable
+        currentY = (doc.lastAutoTable?.finalY || currentY) + 7;
+      }
+
+      // 4. TABEL B: REKAPITULASI MUTASI BARANG GUDANG
+      if (sectionMode === 'BOTH' || sectionMode === 'SUMMARY_ONLY') {
+        if (currentY > doc.internal.pageSize.getHeight() - 40) {
+          doc.addPage();
+          currentY = 12;
+        }
+
+        doc.setFontSize(8.5);
+        doc.setTextColor(15, 23, 42);
+        doc.setFont('helvetica', 'bold');
+        doc.text(
+          `${sectionMode === 'BOTH' ? 'B.' : 'A.'} REKAPITULASI MUTASI BARANG GUDANG (${filteredRecapItems.length} Item)`,
+          margin,
+          currentY
+        );
+        currentY += 3;
+
+        const recapHeaders = [
+          ['No', 'Code & Rak', 'Nama Part & PN', 'Code Unit', 'Mekanik & PIC', 'Awal', 'IN', 'OUT', 'Akhir', 'Harga Satuan', 'Total Nilai']
+        ];
+        const recapBody = filteredRecapItems.map((item, idx) => {
+          const itemInTotal = item.inQty + item.adjPlusQty;
+          const itemOutTotal = item.outQty + item.adjMinusQty;
+          const latestMeta = latestTxByItem.get(item.codeItem.toUpperCase());
+          return [
+            String(idx + 1),
+            `${item.codeItem}\nRak:${item.rak}`,
+            `${item.partName}\nPN:${item.partNumber}`,
+            latestMeta?.codeUnit || item.codeUnit || item.modelUnit || '-',
+            `Mek: ${latestMeta?.mechanic || '-'}\nPIC: ${latestMeta?.picLogistik || preparedBy}`,
+            String(item.awalQty),
+            `+${itemInTotal}`,
+            `-${itemOutTotal}`,
+            `${item.akhirQty} ${item.unit}`,
+            item.price > 0 ? formatRupiah(item.price) : 'Rp0',
+            formatRupiah(item.totalValue),
+          ];
+        });
+
+        const recapFoot = [
+          [
+            'TOTAL REKAPITULASI',
+            '',
+            '',
+            '',
+            '',
+            String(reportStats.recapTotalAwal),
+            `+${reportStats.recapTotalIn}`,
+            `-${reportStats.recapTotalOut}`,
+            `${reportStats.recapTotalAkhir} Pcs`,
+            '',
+            formatRupiah(reportStats.recapTotalAsset),
+          ]
+        ];
+
+        autoTable(doc, {
+          startY: currentY,
+          head: recapHeaders,
+          body: recapBody,
+          foot: recapFoot,
+          theme: 'grid',
+          margin: { left: margin, right: margin },
+          headStyles: {
+            fillColor: [15, 23, 42],
+            textColor: [255, 255, 255],
+            fontSize: 6.5,
+            fontStyle: 'bold',
+            halign: 'center',
+          },
+          footStyles: {
+            fillColor: [15, 23, 42],
+            textColor: [245, 158, 11],
+            fontSize: 6.5,
+            fontStyle: 'bold',
+          },
+          styles: {
+            fontSize: 6,
+            cellPadding: 1.2,
+            overflow: 'linebreak',
+          },
+          columnStyles: {
+            0: { cellWidth: 7, halign: 'center' },
+            1: { cellWidth: 19 },
+            2: { cellWidth: 'auto' },
+            3: { cellWidth: 16 },
+            4: { cellWidth: 22 },
+            5: { cellWidth: 10, halign: 'right' },
+            6: { cellWidth: 11, halign: 'right' },
+            7: { cellWidth: 11, halign: 'right' },
+            8: { cellWidth: 15, halign: 'right' },
+            9: { cellWidth: 20, halign: 'right' },
+            10: { cellWidth: 23, halign: 'right' },
+          },
+          didDrawPage: () => {
+            doc.setFontSize(6);
+            doc.setTextColor(148, 163, 184);
+            doc.text(
+              `${companyName} • Laporan Gudang Resmi • Halaman ${doc.getNumberOfPages()}`,
+              margin,
+              doc.internal.pageSize.getHeight() - 4
+            );
+          },
+        });
+
+        // @ts-expect-error jspdf-autotable extends jsPDF instance with lastAutoTable
+        currentY = (doc.lastAutoTable?.finalY || currentY) + 7;
+      }
+
+      // 5. BLOK TANDA TANGAN / PENGESAHAN DOKUMEN
+      if (currentY > doc.internal.pageSize.getHeight() - 30) {
+        doc.addPage();
+        currentY = 15;
+      }
+
+      doc.setDrawColor(203, 213, 225); // slate-300
+      doc.line(margin, currentY, pageWidth - margin, currentY);
+      currentY += 4;
+
+      const colWidth = (pageWidth - margin * 2) / 3;
+
+      doc.setFontSize(7);
+      doc.setTextColor(51, 65, 85);
+      doc.setFont('helvetica', 'bold');
+      doc.text('Dibuat Oleh,', margin + colWidth * 0.5, currentY, { align: 'center' });
+      doc.text('Diperiksa Oleh (PIC Logistik),', margin + colWidth * 1.5, currentY, { align: 'center' });
+      doc.text('Disetujui Oleh,', margin + colWidth * 2.5, currentY, { align: 'center' });
+
+      currentY += 13;
+
+      doc.setFontSize(7.5);
+      doc.setTextColor(15, 23, 42);
+      doc.setFont('helvetica', 'bold');
+      doc.text(preparedBy, margin + colWidth * 0.5, currentY, { align: 'center' });
+      doc.text(checkedBy, margin + colWidth * 1.5, currentY, { align: 'center' });
+      doc.text(approvedBy, margin + colWidth * 2.5, currentY, { align: 'center' });
+
+      currentY += 3.5;
+      doc.setFontSize(6);
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(100, 116, 139);
+      doc.text('Admin Inventaris Gudang', margin + colWidth * 0.5, currentY, { align: 'center' });
+      doc.text('PIC Logistik & Operasional', margin + colWidth * 1.5, currentY, { align: 'center' });
+      doc.text('Kepala Gudang / Pimpinan', margin + colWidth * 2.5, currentY, { align: 'center' });
+
+      // Save PDF directly to user's device
+      const fileName = `Laporan_Gudang_${flowFilter}_${periodType}_${selectedDate}.pdf`;
+      doc.save(fileName);
+    } finally {
+      setIsGeneratingPdf(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <style>{`
@@ -504,22 +799,39 @@ export const PrintReportPanel: React.FC<PrintReportPanelProps> = ({
             </div>
           </div>
 
-          <div className="flex items-center gap-2.5">
+          <div className="flex flex-wrap items-center gap-2">
+            {/* 1. Tombol Unduh Laporan PDF (Utama) */}
+            <button
+              type="button"
+              disabled={isGeneratingPdf}
+              onClick={handleDownloadReportPdf}
+              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-rose-500/15 hover:bg-rose-500/25 border border-rose-500/40 text-rose-300 font-bold text-xs transition cursor-pointer disabled:opacity-50 shadow-sm"
+              title="Unduh Laporan langsung ke format PDF (.pdf)"
+            >
+              <Download className="w-4 h-4 text-rose-400" />
+              <span>{isGeneratingPdf ? 'Membuat PDF...' : 'Unduh Laporan (PDF)'}</span>
+            </button>
+
+            {/* 2. Tombol Download Laporan Excel */}
             <button
               type="button"
               onClick={handleExportReportExcel}
-              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/40 text-emerald-300 font-bold text-xs transition cursor-pointer"
+              className="inline-flex items-center gap-2 px-3.5 py-2.5 rounded-xl bg-blue-500/15 hover:bg-blue-500/25 border border-blue-500/40 text-blue-300 font-bold text-xs transition cursor-pointer"
+              title="Download Laporan lengkap dalam format Excel (.xlsx)"
             >
-              <FileSpreadsheet className="w-4 h-4 text-emerald-400" />
-              Export Laporan Excel
+              <FileSpreadsheet className="w-4 h-4 text-blue-400" />
+              Download Excel (.xlsx)
             </button>
+
+            {/* 3. Tombol Cetak Dokumen / Simpan PDF Browser */}
             <button
               type="button"
               onClick={handlePrintDocument}
-              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-extrabold text-xs transition cursor-pointer shadow-lg shadow-amber-500/20"
+              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-extrabold text-xs transition cursor-pointer shadow-lg shadow-amber-500/20"
+              title="Cetak Laporan ke printer atau simpan sebagai file PDF"
             >
               <Printer className="w-4 h-4" />
-              Cetak Laporan Portrait (A4 / PDF)
+              Cetak / Simpan PDF
             </button>
           </div>
         </div>
@@ -932,9 +1244,23 @@ export const PrintReportPanel: React.FC<PrintReportPanelProps> = ({
                   Anda dapat langsung mengisi/mengubah <strong>Nama Mekanik Pengambil</strong>, <strong>Code Unit</strong>, dan <strong>PIC Logistik</strong> pada setiap baris transaksi.
                 </p>
               </div>
-              <span className="text-[11px] font-mono font-semibold text-slate-600">
-                Total: {filteredTransactions.length} Transaksi
-              </span>
+              <div className="flex items-center gap-2">
+                <span className="text-[11px] font-mono font-semibold text-slate-600">
+                  Total: {filteredTransactions.length} Transaksi
+                </span>
+                {filteredTransactions.length > 0 && (
+                  <button
+                    type="button"
+                    disabled={isGeneratingPdf}
+                    onClick={handleDownloadReportPdf}
+                    className="no-print inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-800 border border-rose-300 text-[11px] font-bold transition cursor-pointer"
+                    title="Unduh Rincian Log Transaksi ke file PDF"
+                  >
+                    <Download className="w-3.5 h-3.5 text-rose-700" />
+                    Unduh PDF
+                  </button>
+                )}
+              </div>
             </div>
 
             {filteredTransactions.length === 0 ? (
@@ -1150,6 +1476,16 @@ export const PrintReportPanel: React.FC<PrintReportPanelProps> = ({
                 <span className="text-[11px] font-mono font-semibold text-slate-600">
                   Total: {filteredRecapItems.length.toLocaleString('id-ID')} Item Gudang
                 </span>
+                <button
+                  type="button"
+                  disabled={isGeneratingPdf}
+                  onClick={handleDownloadReportPdf}
+                  className="no-print inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-800 border border-rose-300 text-[11px] font-bold transition cursor-pointer"
+                  title="Unduh Rekapitulasi Mutasi ke file PDF"
+                >
+                  <Download className="w-3.5 h-3.5 text-rose-700" />
+                  Unduh PDF
+                </button>
                 <div className="no-print flex items-center gap-1.5 text-xs">
                   <select
                     value={recapPageSize}

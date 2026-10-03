@@ -83,7 +83,7 @@ export function splitPicAndRecipient(tx: {
     };
   }
   return {
-    officer: tx.picName || 'Petugas Gudang',
+    officer: tx.picName && tx.picName.trim() ? tx.picName.trim() : '-',
     recipient: '-',
   };
 }

@@ -80,6 +80,10 @@ import { ResetDataModal } from './components/ResetDataModal';
 import { GoogleDriveModal } from './components/GoogleDriveModal';
 import { PrintReportPanel } from './components/PrintReportPanel';
 import {
+  LogCsvEditorModal,
+  serializeTransactionsToCsv,
+} from './components/LogCsvEditorModal';
+import {
   StockOpnamePanel,
   OpnameAdjustmentPayload,
 } from './components/StockOpnamePanel';
@@ -162,6 +166,7 @@ export default function App() {
   const [isBulkDeletingTx, setIsBulkDeletingTx] = useState<boolean>(false);
   const [isResetModalOpen, setIsResetModalOpen] = useState<boolean>(false);
   const [isGoogleDriveModalOpen, setIsGoogleDriveModalOpen] = useState<boolean>(false);
+  const [isLogCsvEditorOpen, setIsLogCsvEditorOpen] = useState<boolean>(false);
   const [isAddModalOpen, setIsAddModalOpen] = useState<boolean>(false);
   const [isImportExcelModalOpen, setIsImportExcelModalOpen] = useState<boolean>(false);
   const [qrPreviewItem, setQrPreviewItem] = useState<InventoryItem | null>(null);
@@ -407,7 +412,9 @@ export default function App() {
           : tx.txType === 'ADJ_PLUS'
           ? 'Penyesuaian (+)'
           : 'Penyesuaian (-)'
-      } sebanyak ${tx.qty} Pcs • Petugas: ${officer}${
+      } sebanyak ${tx.qty} Pcs${
+        officer && officer !== '-' ? ` • Petugas: ${officer}` : ''
+      }${
         recipient && recipient !== '-' ? ` | Penerima: ${recipient}` : ''
       }. Stok Akhir: ${tx.prevAkhirQty} → ${tx.newAkhirQty} Pcs.`,
       txType: tx.txType,
@@ -973,7 +980,13 @@ export default function App() {
     const normalizedItems = data.items.map((item, idx) => {
       const formattedUpdate = formatDateDdMmmmYy(item.tanggalUpdate);
       const mvStatus = calculateMovementStatus(formattedUpdate);
-      const akhir = calculateAkhirQty(item);
+      const akhir = calculateAkhirQty(
+        item.awalQty,
+        item.inQty,
+        item.adjPlusQty,
+        item.outQty,
+        item.adjMinusQty
+      );
       const remark = calculateRemark(akhir, item.minQty, item.maxQty);
       const totalValue = calculateTotalValue(akhir, item.price);
       return {
@@ -1098,6 +1111,75 @@ export default function App() {
     link.click();
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
+  };
+
+  // Download Log Harian Transactions to CSV
+  const handleDownloadLogHarianCsv = (customTxList?: WarehouseTransaction[]) => {
+    const targetList = customTxList ?? filteredTransactions;
+    const csvString = serializeTransactionsToCsv(targetList, masterItemByCodeMap);
+    const blob = new Blob(['\uFEFF' + csvString], {
+      type: 'text/csv;charset=utf-8;',
+    });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute(
+      'download',
+      `Log_Transaksi_Harian_MME_${formatLedgerDate()}.csv`
+    );
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
+  // Save Bulk Edited Transactions from Log CSV Editor Modal
+  const handleSaveBulkTransactions = async (
+    updatedTxList: WarehouseTransaction[]
+  ) => {
+    const normalized = updatedTxList.map((tx) => ({
+      ...tx,
+      dateStr: formatDateDdMmmmYy(tx.dateStr),
+    }));
+    setTransactions(normalized);
+
+    setLiveToast({
+      title: 'CSV Log Harian Berhasil Diperbarui!',
+      detail: `${normalized.length} baris riwayat transaksi harian telah disimpan.`,
+      txType: 'IN',
+    });
+    setTimeout(() => setLiveToast(null), 5500);
+
+    if (user) {
+      try {
+        const CHUNK_SIZE = 400;
+        for (let i = 0; i < normalized.length; i += CHUNK_SIZE) {
+          const chunk = normalized.slice(i, i + CHUNK_SIZE);
+          const batch = writeBatch(db);
+          for (const tx of chunk) {
+            const txRef = doc(db, 'transactions', tx.id);
+            const { timestampMs, recipientName, ...firestoreTxPayload } = tx;
+            const combinedPic =
+              recipientName && recipientName !== '-'
+                ? `${tx.picName} | Penerima: ${recipientName}`.slice(0, 100)
+                : tx.picName.slice(0, 100);
+            batch.set(
+              txRef,
+              {
+                ...firestoreTxPayload,
+                picName: combinedPic,
+                operatorUid: user.uid,
+                createdAt: serverTimestamp(),
+              },
+              { merge: true }
+            );
+          }
+          await batch.commit();
+        }
+      } catch (err) {
+        console.warn('Disimpan ke lokal; gagal sinkron batch transaksi ke Firestore:', err);
+      }
+    }
   };
 
   // Computed KPI Metrics
@@ -2182,10 +2264,10 @@ export default function App() {
                   Log Transaksi Pemasukan & Pengeluaran Harian Gudang
                 </h2>
                 <p className="text-xs text-slate-400">
-                  Seluruh riwayat pemindaian QR Code & koreksi stok tercatat secara real-time
+                  Seluruh riwayat pemindaian QR Code & koreksi stok tercatat secara real-time (dapat diunduh & diedit via CSV)
                 </p>
               </div>
-              <div className="flex flex-wrap items-center gap-2.5">
+              <div className="flex flex-wrap items-center gap-2">
                 <div className="relative">
                   <Search className="w-4 h-4 text-slate-500 absolute left-3 top-2.5" />
                   <input
@@ -2193,13 +2275,13 @@ export default function App() {
                     value={txSearch}
                     onChange={(e) => setTxSearch(e.target.value)}
                     placeholder="Cari Kode, Nama Part, Petugas..."
-                    className="bg-slate-950 border border-slate-800 rounded-lg pl-9 pr-3 py-2 text-xs text-slate-100 outline-none"
+                    className="h-9 bg-slate-950 border border-slate-800 rounded-lg pl-9 pr-3 text-xs text-slate-100 outline-none"
                   />
                 </div>
                 <select
                   value={txTypeFilter}
                   onChange={(e) => setTxTypeFilter(e.target.value)}
-                  className="bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-slate-200 outline-none"
+                  className="h-9 bg-slate-950 border border-slate-800 rounded-lg px-3 text-xs text-slate-200 outline-none"
                 >
                   <option value="ALL">Semua Jenis Transaksi</option>
                   <option value="IN">Barang Masuk (IN)</option>
@@ -2207,15 +2289,40 @@ export default function App() {
                   <option value="ADJ_PLUS">Penyesuaian (+)</option>
                   <option value="ADJ_MINUS">Penyesuaian (-)</option>
                 </select>
+
+                <div className="hidden sm:block h-5 w-px bg-slate-800" />
+
+                {/* Tombol Edit CSV */}
+                <button
+                  type="button"
+                  onClick={() => setIsLogCsvEditorOpen(true)}
+                  className="h-9 inline-flex items-center gap-1.5 px-3.5 rounded-lg bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/40 text-amber-300 text-xs font-bold transition cursor-pointer"
+                  title="Edit data Log Harian dalam tabel CSV atau upload file CSV hasil edit"
+                >
+                  <Edit3 className="w-3.5 h-3.5 text-amber-400" />
+                  <span>Edit CSV</span>
+                </button>
+
+                {/* Tombol Download CSV */}
+                <button
+                  type="button"
+                  onClick={() => handleDownloadLogHarianCsv(filteredTransactions)}
+                  className="h-9 inline-flex items-center gap-1.5 px-3.5 rounded-lg bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/40 text-emerald-200 text-xs font-bold transition cursor-pointer"
+                  title="Download Log Transaksi Harian ke file CSV (.csv)"
+                >
+                  <Download className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>Download CSV</span>
+                </button>
+
                 {filteredTransactions.length > 0 && (
                   <button
                     type="button"
                     onClick={() => setIsBulkDeletingTx(true)}
-                    className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-rose-500/15 hover:bg-rose-500/25 border border-rose-500/40 text-rose-300 text-xs font-bold transition cursor-pointer"
+                    className="h-9 inline-flex items-center gap-1.5 px-3 rounded-lg bg-rose-500/15 hover:bg-rose-500/25 border border-rose-500/40 text-rose-300 text-xs font-bold transition cursor-pointer"
                     title="Hapus semua log yang tampil (Wajib Password)"
                   >
                     <Trash2 className="w-3.5 h-3.5 text-rose-400" />
-                    Hapus Log ({filteredTransactions.length})
+                    <span>Hapus Log ({filteredTransactions.length})</span>
                   </button>
                 )}
               </div>
@@ -2269,7 +2376,7 @@ export default function App() {
                       <th className="py-3 px-4">Code Unit</th>
                       <th className="py-3 px-4">PIC Logistik</th>
                       <th className="py-3 px-4">Catatan</th>
-                      <th className="py-3 px-4 text-center">Hapus</th>
+                      <th className="py-3 px-4 text-center">Aksi</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-800/70 text-xs">
@@ -2351,14 +2458,24 @@ export default function App() {
                           </td>
                           <td className="py-3 px-4 text-slate-300 max-w-xs">{tx.notes}</td>
                           <td className="py-3 px-4 text-center">
-                            <button
-                              type="button"
-                              onClick={() => setDeletingTx(tx)}
-                              className="p-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/25 text-rose-400 border border-rose-500/30 transition cursor-pointer"
-                              title="Hapus Log Transaksi Ini (Wajib Password)"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
+                            <div className="inline-flex items-center gap-1.5">
+                              <button
+                                type="button"
+                                onClick={() => setIsLogCsvEditorOpen(true)}
+                                className="p-1.5 rounded-lg bg-amber-500/10 hover:bg-amber-500/25 text-amber-300 border border-amber-500/30 transition cursor-pointer"
+                                title="Edit Baris di Editor CSV"
+                              >
+                                <Edit3 className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setDeletingTx(tx)}
+                                className="p-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/25 text-rose-400 border border-rose-500/30 transition cursor-pointer"
+                                title="Hapus Log Transaksi Ini (Wajib Password)"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       );
@@ -2466,6 +2583,16 @@ export default function App() {
           transactions={transactions}
           onClose={() => setIsGoogleDriveModalOpen(false)}
           onRestoreFromDrive={handleRestoreFromDrive}
+        />
+      )}
+
+      {isLogCsvEditorOpen && (
+        <LogCsvEditorModal
+          transactions={transactions}
+          items={items}
+          onClose={() => setIsLogCsvEditorOpen(false)}
+          onSaveTransactions={handleSaveBulkTransactions}
+          onDownloadCsv={(txList) => handleDownloadLogHarianCsv(txList)}
         />
       )}
     </div>

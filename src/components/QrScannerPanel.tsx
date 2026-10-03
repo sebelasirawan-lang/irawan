@@ -101,7 +101,7 @@ export const QrScannerPanel: React.FC<QrScannerPanelProps> = ({
   // Transaction form state
   const [txType, setTxType] = useState<TransactionType>('OUT');
   const [qty, setQty] = useState<number>(1);
-  const [picName, setPicName] = useState<string>('Petugas Gudang');
+  const [picName, setPicName] = useState<string>('');
   const [recipientName, setRecipientName] = useState<string>('');
   const [unitRef, setUnitRef] = useState<string>('');
   const [notes, setNotes] = useState<string>('');
@@ -285,7 +285,7 @@ export const QrScannerPanel: React.FC<QrScannerPanelProps> = ({
         codeItem: matchedItem.codeItem,
         txType,
         qty,
-        picName: picName.trim() || 'Petugas Gudang',
+        picName: picName.trim(),
         recipientName:
           txType === 'OUT' || txType === 'ADJ_MINUS'
             ? recipientName.trim() || 'Mekanik Operasional'
@@ -317,6 +317,8 @@ export const QrScannerPanel: React.FC<QrScannerPanelProps> = ({
         }] ${matchedItem.partName} telah tersinkronisasi ke Dashboard Admin.`
       );
       setQty(1);
+      setPicName('');
+      setRecipientName('');
       setNotes('');
       setTimeout(() => setLastSuccessMsg(null), 6000);
     } finally {
@@ -1154,11 +1156,10 @@ export const QrScannerPanel: React.FC<QrScannerPanelProps> = ({
                     <User className="w-4 h-4 text-slate-500 absolute left-3 top-2.5" />
                     <input
                       type="text"
-                      required
                       maxLength={50}
                       value={picName}
                       onChange={(e) => setPicName(e.target.value)}
-                      placeholder="Nama PIC Logistik..."
+                      placeholder="Kosong (atau ketik nama PIC)..."
                       className="w-full bg-slate-950 border border-slate-800 focus:border-amber-500 rounded-lg pl-9 pr-3 py-2 text-xs text-slate-100 outline-none"
                     />
                   </div>
