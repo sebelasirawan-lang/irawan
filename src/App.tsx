@@ -199,6 +199,7 @@ export default function App() {
           {
             ...item,
             updatedByUid: uid,
+            orgId: 'gudang_utama',
             createdAt: serverTimestamp(),
             updatedAt: serverTimestamp(),
           },
