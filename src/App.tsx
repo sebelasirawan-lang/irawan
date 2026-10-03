@@ -1426,7 +1426,7 @@ useEffect(() => {
 
 return (
   <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col">
-
+    
     <button
       onClick={deleteAllInventoryFromFirestore}
       className="m-4 rounded-lg bg-red-600 px-4 py-2 font-bold text-white"
@@ -1434,18 +1434,7 @@ return (
       HAPUS INVENTORY FIRESTORE
     </button>
 
-    {/* Top Industrial Command Header */}
-      <header className="no-print sticky top-0 z-30 bg-slate-900/95 backdrop-blur-md border-b border-slate-800 px-4 lg:px-6 py-3">
-        <div className="max-w-[1600px] mx-auto flex flex-wrap items-center justify-between gap-4">
-          {/* Brand & Live Status */}
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-amber-500 flex items-center justify-center text-slate-950 font-extrabold shadow-md shadow-amber-500/20">
-              <Boxes className="w-6 h-6" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2 fle
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col">
-      {/* Top Industrial Command Header */}
+   
       <header className="no-print sticky top-0 z-30 bg-slate-900/95 backdrop-blur-md border-b border-slate-800 px-4 lg:px-6 py-3">
         <div className="max-w-[1600px] mx-auto flex flex-wrap items-center justify-between gap-4">
           {/* Brand & Live Status */}
