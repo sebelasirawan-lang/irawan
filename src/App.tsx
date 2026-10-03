@@ -568,6 +568,7 @@ export default function App() {
           itemRef,
           {
             ...savedItem,
+            orgId: 'gudang_utama',
             updatedByUid: user.uid,
             createdAt: serverTimestamp(),
             updatedAt: serverTimestamp(),
