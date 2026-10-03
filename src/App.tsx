@@ -209,7 +209,46 @@ export default function App() {
       await batch.commit();
     }
   };
+const localInventorySyncDone = useRef<string | null>(null);
 
+useEffect(() => {
+  if (!user) {
+    localInventorySyncDone.current = null;
+    return;
+  }
+
+  if (localInventorySyncDone.current === user.uid) return;
+
+  const syncLocalInventory = async () => {
+    try {
+      const localData = localStorage.getItem(STORAGE_ITEMS_KEY);
+      if (!localData) return;
+
+      const localItems: InventoryItem[] = JSON.parse(localData);
+
+      if (!Array.isArray(localItems) || localItems.length === 0) return;
+
+      console.log(
+        `Sinkronisasi ${localItems.length} item lokal ke Firestore...`
+      );
+
+      await syncItemsToFirestoreInChunks(localItems, user.uid);
+
+      localInventorySyncDone.current = user.uid;
+
+      console.log(
+        `BERHASIL: ${localItems.length} item lokal sudah disinkronkan ke Firestore.`
+      );
+    } catch (error) {
+      console.error(
+        'GAGAL SINKRONISASI INVENTORY LOKAL KE FIRESTORE:',
+        error
+      );
+    }
+  };
+
+  syncLocalInventory();
+}, [user]);
   // Save to localStorage whenever items or transactions update
   useEffect(() => {
     try {
