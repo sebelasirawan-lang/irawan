@@ -432,26 +432,12 @@ useEffect(() => {
       itemsQuery,
       async (snapshot) => {
         setCloudSynced(true);
-        if (snapshot.empty) {
-          // Seed initial CSV inventory into Firestore if empty
-          try {
-            const batch = writeBatch(db);
-            for (const item of INITIAL_INVENTORY_ITEMS) {
-              const ref = doc(db, 'inventory_items', item.codeItem);
-              batch.set(ref, {
-                ...item,
-                orgId: 'gudang_utama',
-                updatedByUid: user.uid,
-                createdAt: serverTimestamp(),
-                updatedAt: serverTimestamp(),
-              });
-            }
-            await batch.commit();
-          } catch (err) {
-            console.warn('Could not auto-seed Firestore inventory:', err);
-          }
-          return;
-        }
+  if (snapshot.empty) {
+  console.log('Firestore inventory kosong. Menunggu import CSV.');
+  setItems([]);
+  setCloudSynced(true);
+  return;
+}
 
         const remoteItems: InventoryItem[] = [];
         snapshot.forEach((docSnap) => {
@@ -1038,7 +1024,29 @@ useEffect(() => {
       type: 'SYNC_BULK_ITEMS',
       payload: nextList,
     });
+    // Sinkronisasi hasil import CSV/Excel ke Firestore
+    if (user) {
+      try {
+        await syncItemsToFirestoreInChunks(nextList, user.uid);
 
+        console.log(
+          `BERHASIL: ${nextList.length} item berhasil disinkronkan ke Firestore.`
+        );
+      } catch (error) {
+        console.error(
+          'GAGAL SINKRONISASI IMPORT KE FIRESTORE:',
+          error
+        );
+
+        setLiveToast({
+          type: 'error',
+          message:
+            'Import berhasil secara lokal, tetapi gagal menyimpan data ke Firestore.',
+        });
+
+        setTimeout(() => setLiveToast(null), 8000);
+      }
+    }
     setLiveToast({
       title: 'Import dari CSV Berhasil!',
       detail: `${importedItems.length} data barang berhasil diimpor dari CSV (${
@@ -1047,14 +1055,6 @@ useEffect(() => {
       txType: 'IN',
     });
     setTimeout(() => setLiveToast(null), 6500);
-
-    if (user) {
-      try {
-        await syncItemsToFirestoreInChunks(importedItems, user.uid);
-      } catch (err) {
-        console.warn('Disimpan ke lokal; gagal batch write Firestore:', err);
-      }
-    }
   };
 
   // Reset to initial CSV data (Password "11tiga89" Verified)
