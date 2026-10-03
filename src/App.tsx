@@ -210,7 +210,7 @@ export default function App() {
       await batch.commit();
     }
   };
-const localInventorySyncDone = useRef<string | null>(null);
+/*const localInventorySyncDone = useRef<string | null>(null);
 
 useEffect(() => {
   if (!user) {
@@ -250,6 +250,7 @@ useEffect(() => {
 
   syncLocalInventory();
 }, [user]);
+*/
   // Save to localStorage whenever items or transactions update
   useEffect(() => {
     try {
