@@ -198,8 +198,8 @@ export default function App() {
           ref,
           {
             ...item,
-            updatedByUid: uid,
             orgId: 'gudang_utama',
+            updatedByUid: uid,
             createdAt: serverTimestamp(),
             updatedAt: serverTimestamp(),
           },
@@ -327,6 +327,7 @@ export default function App() {
               const ref = doc(db, 'inventory_items', item.codeItem);
               batch.set(ref, {
                 ...item,
+                orgId: 'gudang_utama',
                 updatedByUid: user.uid,
                 createdAt: serverTimestamp(),
                 updatedAt: serverTimestamp(),
@@ -520,6 +521,7 @@ export default function App() {
           itemRef,
           {
             ...updatedItem,
+            orgId: 'gudang_utama',
             updatedByUid: user.uid,
             createdAt: serverTimestamp(),
             updatedAt: serverTimestamp(),
