@@ -8,7 +8,6 @@ import {
   collection,
   deleteDoc,
   doc,
-  getDocs,
   onSnapshot,
   query,
   serverTimestamp,
@@ -93,53 +92,7 @@ import {
 const STORAGE_ITEMS_KEY = 'gudangpro_inventory_v1';
 const STORAGE_TX_KEY = 'gudangpro_transactions_v1';
 const BROADCAST_CHANNEL_NAME = 'gudangpro_realtime_channel';
-const deleteAllInventoryFromFirestore = async () => {
-  try {
-    console.log('MULAI MENGHAPUS INVENTORY FIRESTORE...');
 
-    const snapshot = await getDocs(
-      collection(db, 'inventory_items')
-    );
-
-    console.log(
-      `Ditemukan ${snapshot.size} item di Firestore.`
-    );
-
-    if (snapshot.empty) {
-      console.log('inventory_items sudah kosong.');
-      return;
-    }
-
-    const CHUNK_SIZE = 400;
-
-    for (let i = 0; i < snapshot.docs.length; i += CHUNK_SIZE) {
-      const chunk = snapshot.docs.slice(i, i + CHUNK_SIZE);
-      const batch = writeBatch(db);
-
-      chunk.forEach((docSnap) => {
-        batch.delete(docSnap.ref);
-      });
-
-      await batch.commit();
-
-      console.log(
-        `Terhapus ${Math.min(
-          i + CHUNK_SIZE,
-          snapshot.docs.length
-        )} / ${snapshot.docs.length}`
-      );
-    }
-
-    console.log(
-      `BERHASIL: ${snapshot.size} item inventory dihapus dari Firestore.`
-    );
-  } catch (error) {
-    console.error(
-      'GAGAL MENGHAPUS INVENTORY FIRESTORE:',
-      error
-    );
-  }
-};
 export default function App() {
   const [activeTab, setActiveTab] = useState<'DASHBOARD' | 'SCANNER' | 'STOCK_OPNAME' | 'QR_LABELS' | 'HISTORY' | 'PRINT_REPORT'>('DASHBOARD');
   const [user, setUser] = useState<FirebaseUser | null>(null);
@@ -1427,12 +1380,7 @@ useEffect(() => {
 return (
   <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col">
     
-    <button
-      onClick={deleteAllInventoryFromFirestore}
-      className="m-4 rounded-lg bg-red-600 px-4 py-2 font-bold text-white"
-    >
-      HAPUS INVENTORY FIRESTORE
-    </button>
+   
 
    
       <header className="no-print sticky top-0 z-30 bg-slate-900/95 backdrop-blur-md border-b border-slate-800 px-4 lg:px-6 py-3">
