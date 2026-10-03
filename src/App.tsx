@@ -541,7 +541,14 @@ export default function App() {
           createdAt: serverTimestamp(),
         });
       } catch (error) {
-        console.warn('Sinkronisasi lokal aktif; gagal menulis ke Firestore:', error);
+  console.error('GAGAL SINKRONISASI KE FIRESTORE:', error);
+
+  setLiveToast({
+    type: 'error',
+    message: 'Gagal menyimpan perubahan ke Firestore. Data masih tersimpan lokal di PC.',
+  });
+
+  setTimeout(() => setLiveToast(null), 8000);
       }
     }
   };
